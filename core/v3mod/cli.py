@@ -1,0 +1,156 @@
+"""Command-line entry point (core).
+
+Optional add-ons register their own commands as separate console scripts:
+  v3mod-errors    error.log filtering and vanilla-baseline diffing
+  v3mod-settings  named pdx_settings.json profiles
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+
+from . import __version__
+from . import checks, launch, linking, lint, scaffold, testing
+
+
+def _not_implemented(name: str, doc_section: str):
+    def _cmd(args) -> int:
+        print(f"`v3mod {name}` is not implemented yet. See the working document, section {doc_section}.")
+        return 2
+    return _cmd
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="v3mod",
+        description="Victoria 3 mod CLI — scaffold, lint (Tiger), link, launch, headless scripted tests. "
+                    "Optional add-ons: v3mod-errors, v3mod-settings.",
+    )
+    p.add_argument("--version", action="version", version=f"v3mod {__version__}")
+    sub = p.add_subparsers(dest="command", required=True)
+
+    # new -------------------------------------------------------------------
+    n = sub.add_parser("new", help="create a new mod project (interactive)")
+    n.add_argument("path", nargs="?", help="parent directory (default: cwd)")
+    n.add_argument("-y", "--yes", action="store_true", help="accept defaults / skip prompts")
+    n.add_argument("--name")
+    n.add_argument("--dir", help="directory name (ASCII only)")
+    n.add_argument("--author")
+    n.add_argument("--id", help="mod id, reverse-domain style")
+    n.add_argument("--version", dest="version")
+    n.add_argument("--game-version", dest="game_version")
+    n.add_argument("--description")
+    n.add_argument("--tags", type=lambda s: [t.strip() for t in s.split(",") if t.strip()])
+    n.add_argument("--prefix", help="script prefix, e.g. mymod")
+    mp = n.add_mutually_exclusive_group()
+    mp.add_argument("--multiplayer", dest="multiplayer", action="store_true", default=None)
+    mp.add_argument("--no-multiplayer", dest="multiplayer", action="store_false")
+    cmf = n.add_mutually_exclusive_group()
+    cmf.add_argument("--cmf", dest="cmf", action="store_true", default=None,
+                     help="declare a dependency on Community Mod Framework")
+    cmf.add_argument("--no-cmf", dest="cmf", action="store_false")
+    g = n.add_mutually_exclusive_group()
+    g.add_argument("--git", dest="git", action="store_true", default=None)
+    g.add_argument("--no-git", dest="git", action="store_false")
+    lk = n.add_mutually_exclusive_group()
+    lk.add_argument("--link", dest="link", action="store_true", default=None)
+    lk.add_argument("--no-link", dest="link", action="store_false")
+    n.set_defaults(func=scaffold.cmd_new)
+
+    # lint ------------------------------------------------------------------
+    l = sub.add_parser("lint", help="run vic3-tiger on the mod")
+    l.add_argument("--ci", action="store_true", help="summary + non-zero exit on findings")
+    l.add_argument("--json", action="store_true", help="print raw Tiger JSON")
+    l.add_argument("--baseline", action="store_true", help="write framework/tiger-baseline.json")
+    l.add_argument("--no-suppress", action="store_true", help="ignore existing baseline")
+    l.add_argument("--fail-on", choices=lint.SEVERITY_ORDER, default="warning",
+                   help="minimum severity that fails --ci (default: warning)")
+    l.add_argument("--limit", type=int, default=30, help="max findings to print in --ci")
+    l.add_argument("--consolidate", action="store_true")
+    l.add_argument("--unused", action="store_true")
+    l.add_argument("--no-color", action="store_true")
+    l.add_argument("--game", help="path to game install (overrides config)")
+    l.set_defaults(func=lint.cmd_lint)
+
+    # link / unlink ---------------------------------------------------------
+    lnk = sub.add_parser("link", help="symlink mod/ into the game's mod folder")
+    lnk.add_argument("--name", help="link name (default: project directory name)")
+    lnk.set_defaults(func=linking.cmd_link)
+    ulk = sub.add_parser("unlink", help="remove the symlink")
+    ulk.add_argument("--name")
+    ulk.set_defaults(func=linking.cmd_unlink)
+
+    # checks ----------------------------------------------------------------
+    co = sub.add_parser("check-overrides", help="fail on undeclared full-file overrides of vanilla")
+    co.add_argument("--game")
+    co.set_defaults(func=checks.cmd_check_overrides)
+    sub.add_parser("paths", help="show detected directories").set_defaults(func=checks.cmd_paths)
+    sub.add_parser("doctor", help="check toolchain and project health").set_defaults(func=checks.cmd_doctor)
+
+    # launch / playset ------------------------------------------------------
+    la = sub.add_parser("launch", help="launch the game directly (no launcher); --steam to go via Steam")
+    la.add_argument("--steam", action="store_true", help="launch via `steam -applaunch` instead of the binary")
+    la.add_argument("--direct", action="store_true", help=argparse.SUPPRESS)  # kept for compatibility; now default
+    la.add_argument("--xvfb", action="store_true", help="wrap a direct launch in xvfb-run (experimental)")
+    la.add_argument("--runtime", choices=["auto", "sniper", "soldier", "none"], default="auto",
+                    help="run inside a Steam Linux Runtime container (default auto: sniper, then soldier; none = host libs)")
+    la.add_argument("--tests", action="store_true", help="add -run_tests")
+    la.add_argument("--no-save-after-failed-test", action="store_true")
+    la.add_argument("--flag", action="append", metavar="FLAG", help="extra launch flag (repeatable)")
+    la.add_argument("--wait", action="store_true", help="block until the process exits")
+    la.add_argument("--dry-run", action="store_true", help="print the command only")
+    la.set_defaults(func=launch.cmd_launch)
+
+    ps = sub.add_parser("playset", help="inspect/edit the launcher's dlc_load.json (Linux)")
+    pssub = ps.add_subparsers(dest="playset_command", required=True)
+    pssub.add_parser("show", help="print dlc_load.json")
+    pe = pssub.add_parser("enable", help="append an entry to enabled_mods")
+    pe.add_argument("--entry", required=True, help='exact string to add, e.g. "mod/grand_canals"')
+    ps.set_defaults(func=launch.cmd_playset)
+
+    # test / flags ----------------------------------------------------------
+    t = sub.add_parser("test", help="run scripted tests headless (-nographics -handsoff -scripted_tests) and report")
+    t.add_argument("--no-nographics", action="store_true", help="render normally (keeps -handsoff)")
+    t.add_argument("--debug", action="store_true", help="also pass -debug_mode")
+    t.add_argument("--keep-vanilla-tests", action="store_true",
+                   help="don't hide the base game's own scripted tests (they run to their last_date)")
+    t.add_argument("--no-save-after-failed-test", action="store_true", help="skip the TEST_FAIL_* save on failure")
+    t.add_argument("--continue-last-save", action="store_true", help="add -continuelastsave")
+    t.add_argument("--seed", type=int, help="add -random_seed=N")
+    t.add_argument("--xvfb", action="store_true",
+                   help="also wrap in xvfb-run (only if -nographics alone still needs a display)")
+    t.add_argument("--runtime", choices=["auto", "sniper", "soldier", "none"], default="auto")
+    t.add_argument("--flag", action="append", metavar="FLAG", help="extra launch flag (repeatable)")
+    t.add_argument("--poll", type=int, default=15, help="seconds between checks of tests.txt (default 15)")
+    t.add_argument("--timeout", type=int, default=180, help="minutes to wait for results (default 180)")
+    t.add_argument("--dry-run", action="store_true")
+    t.set_defaults(func=testing.cmd_test)
+
+    fl = sub.add_parser("flags", help="probe the game binary for known engine launch flags")
+    fl.set_defaults(func=testing.cmd_flags)
+
+    # planned ---------------------------------------------------------------
+    sub.add_parser("sync", help="[planned] patch-upgrade helper") \
+        .set_defaults(func=_not_implemented("sync", "5.5"))
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return int(args.func(args) or 0)
+    except KeyboardInterrupt:
+        print("\naborted")
+        return 130
+    except BrokenPipeError:
+        # Output was piped into something that closed early (e.g. `| head`).
+        # Silence Python's shutdown warning by pointing stdout at devnull.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

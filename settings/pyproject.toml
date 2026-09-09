@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "v3mod-settings"
+version = "0.1.0"
+description = "Named graphics/settings profiles for Victoria 3 (v3mod add-on). Optional: headless test runs do not need it."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = ["v3mod>=0.8"]
+
+[project.scripts]
+v3mod-settings = "v3mod_settings.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["v3mod_settings*"]

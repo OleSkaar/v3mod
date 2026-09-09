@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "v3mod"
+version = "0.8.1"
+description = "Victoria 3 mod CLI: scaffold, lint (via Tiger), link, launch, headless scripted tests."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+v3mod = "v3mod.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["v3mod*"]
