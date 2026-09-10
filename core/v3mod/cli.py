@@ -67,8 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     # new / add / mods ------------------------------------------------------
-    n = sub.add_parser("new", help="create a workspace (monorepo) and its first mod")
-    n.add_argument("path", nargs="?", help="workspace directory, created if missing (default: cwd)")
+    n = sub.add_parser("new", help="turn the current directory into a workspace, with its first mod")
     n.add_argument("--empty", action="store_true", help="create the workspace only, no first mod")
     n.add_argument("--workspace-name", dest="workspace_name", help="display name (default: directory name)")
     n.add_argument("--id-prefix", dest="id_prefix", help="shared mod-id prefix, e.g. com.github.me")

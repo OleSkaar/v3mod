@@ -35,7 +35,7 @@ cp /tmp/vic3-tiger-linux-v1.19.0/vic3-tiger ~/.local/bin/ && chmod +x ~/.local/b
 
 | Command | What it does |
 |---|---|
-| `v3mod new [dir]` | Create the workspace (monorepo) and its first mod. Asks the shared questions once — author, mod-id prefix, game version, git init — then the mod's own: name, directory, id, version, description, tags, prefix, MP flag, CMF dependency, symlink. Every prompt has a flag; `-y` accepts defaults; `--empty` makes the workspace only. |
+| `v3mod new` | Make the **working directory** the workspace (monorepo) and scaffold its first mod. Takes no path — `cd` to where you want your mods first. Asks the shared questions once — author, mod-id prefix, game version, git init — then the mod's own: name, directory, id, version, description, tags, prefix, MP flag, CMF dependency, symlink. Every prompt has a flag; `-y` accepts defaults; `--empty` makes the workspace only. |
 | `v3mod add [NAME]` | Scaffold another mod in the workspace, inheriting its `[defaults]`. Refuses a directory name, mod id or script prefix already used by a sibling. |
 | `v3mod mods` | Every mod in the workspace, its id, and whether it is linked into the game. |
 | `v3mod lint [--ci] [--baseline]` | Tiger. `--ci` gives a severity summary and exits 1 at/above `--fail-on` (default `warning`). `--baseline` snapshots today's reports so later runs show only new ones. |
@@ -57,7 +57,7 @@ Error-log tooling and settings profiles are separate add-ons (`v3mod-errors`, `v
 
 ```
 <this repo>/                                               the tooling (installed with pipx)
-~/Mods/V3/                                                 the workspace (`v3mod new ~/Mods/V3`), one git repo
+~/Mods/V3/                                                 a workspace (`cd` here, then `v3mod new`), one git repo
 ~/Mods/V3/v3mod-workspace.toml                             shared defaults and tool paths; marks the root
 ~/Mods/V3/mods/<dir>/                                      one mod: v3mod.toml, README, framework/
 ~/Mods/V3/mods/<dir>/mod/                                  the part the game sees

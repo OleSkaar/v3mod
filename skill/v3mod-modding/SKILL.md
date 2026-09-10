@@ -29,7 +29,8 @@ and mod for this machine. Do not hardcode paths.
 Mods live together in one **workspace**: `v3mod-workspace.toml` at the root, one mod per
 `mods/<dir>/`, each with its own `mod/` (what the game loads) and `framework/` (tooling state).
 
-- `v3mod paths` reports no workspace → nothing is set up here. Ask before running `v3mod new <dir>`.
+- `v3mod paths` reports no workspace → nothing is set up here. `v3mod new` makes the *working
+  directory* a workspace, so ask where it should go and `cd` there first; never run it blind.
 - It reports a workspace but no selected mod → several mods and none chosen. Run `v3mod mods`, then
   either `cd mods/<dir>` or pass `--mod <dir>` to every command. Ask which one if it isn't obvious;
   never guess when a change could land in the wrong mod.

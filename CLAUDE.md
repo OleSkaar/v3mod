@@ -1,7 +1,8 @@
 # v3mod — repo guide
 
 Linux-first tooling for Victoria 3 mods. This repo is **the tooling**, not a mod. Mods it scaffolds
-live elsewhere, in a single **workspace** monorepo (`~/Mods/V3/`, one mod per `mods/<dir>/`).
+live elsewhere, in a single **workspace** monorepo — wherever the user keeps it (`~/Mods/V3/` in
+practice), one mod per `mods/<dir>/`.
 
 ## Background
 
@@ -32,10 +33,12 @@ Each piece has its own README with the details; the root `README.md` is the over
 - **No agent-specific code in `core`.** The agent layer is the skill, installed globally.
 - **No machine paths in files.** Anything path-shaped is resolved at run time by `v3mod paths`
   (overridable with `V3MOD_GAME_DIR` / `V3MOD_USER_DIR`), never hardcoded or committed.
-- **One workspace, many mods.** `v3mod new <dir>` creates the workspace — `v3mod-workspace.toml`
-  at the root, mods under `mods/<dir>/`, one git repo — and its first mod; `v3mod add` creates
-  every later mod, inheriting the workspace's `[defaults]` and `[tools]`. Workspaces don't nest,
-  and `new` refuses to run inside one.
+- **One workspace, many mods.** `v3mod new` turns the *working directory* into the workspace —
+  `v3mod-workspace.toml` at the root, mods under `mods/<dir>/`, one git repo — and creates its
+  first mod; `v3mod add` creates every later mod, inheriting the workspace's `[defaults]` and
+  `[tools]`. It takes no path argument: where mods live is the user's choice, never this tool's.
+  Workspaces don't nest, `new` refuses to run inside one, and it confirms before writing into a
+  non-empty directory.
 - **Two config files, clear split.** `v3mod-workspace.toml` marks the root and holds what mods
   share; `mods/<dir>/v3mod.toml` holds only that mod's own name, id, prefix and run flags.
   `paths.resolve_project` picks the mod: `--mod` first, then the working directory, then the

@@ -20,8 +20,9 @@ Mods live together in one **workspace** — a monorepo with shared defaults, cre
 ```bash
 pipx install --editable ./core    # from the root of this repo
 v3mod doctor                      # checks git, steam, tiger, game install, Steam Linux Runtime
-v3mod new ~/Mods/V3               # workspace + its first mod (one git repo)
-cd ~/Mods/V3
+
+mkdir -p ~/Mods/V3 && cd ~/Mods/V3   # wherever you want your mods to live
+v3mod new                         # makes this directory the workspace, with its first mod
 v3mod add "National Strategies"   # every later mod: no setup questions worth answering twice
 v3mod mods                        # what's here, and what's linked into the game
 cd mods/pet_peeves
@@ -31,7 +32,7 @@ v3mod test                        # headless scripted-test run
 ```
 
 ```
-~/Mods/V3/                        the workspace, one git repository
+~/Mods/V3/                        the workspace — this directory is your choice, not v3mod's
   v3mod-workspace.toml            shared defaults (author, id prefix, game version) and tool paths
   mods/pet_peeves/                one mod: v3mod.toml, mod/, framework/
   mods/national_strategies/

@@ -546,13 +546,27 @@ def _report_mod(a: Answers, root: Path, ws: paths.Workspace) -> None:
 # entry points
 # --------------------------------------------------------------------------- #
 
+def _confirm_directory(root: Path, args) -> bool:
+    """`v3mod new` has no path argument, so check before scattering files into the wrong directory."""
+    existing = [p for p in root.iterdir() if p.name != ".git"]
+    if not existing or args.yes:
+        return True
+    print(f"{root} is not empty ({len(existing)} entries). `v3mod new` would add "
+          f"{paths.WORKSPACE_NAME}, {paths.DEFAULT_MODS_DIR}/, README.md and .gitignore here.")
+    if ask_bool("Create the workspace in this directory?", default=False):
+        return True
+    print("aborted; cd to the directory you want the workspace in and run `v3mod new` there")
+    return False
+
+
 def cmd_new(args) -> int:
-    root = Path(args.path).resolve() if args.path else Path.cwd()
+    """Turn the working directory into a workspace. Where that is, is the user's choice."""
+    root = Path.cwd()
     if (root / paths.WORKSPACE_NAME).exists():
         raise SystemExit(
             f"error: {root} is already a v3mod workspace. Use `v3mod add` to create another mod in it."
         )
-    outer = paths.find_workspace(root.parent if not root.exists() else root)
+    outer = paths.find_workspace(root)
     if outer is not None:
         raise SystemExit(
             f"error: {root} is inside the workspace at {outer.root}; workspaces don't nest. "
@@ -560,6 +574,8 @@ def cmd_new(args) -> int:
         )
     if (root / paths.CONFIG_NAME).exists():
         raise SystemExit(f"error: {root} holds a single-mod {paths.CONFIG_NAME}; move it under mods/ first")
+    if not _confirm_directory(root, args):
+        return 1
 
     wa = collect_workspace_answers(args, root)
     inherited = {"author": wa.author, "id_prefix": wa.id_prefix, "game_version": wa.game_version}
@@ -581,7 +597,6 @@ def cmd_new(args) -> int:
         print("  git        : initialised with first commit")
 
     print("\nNext steps:")
-    print(f"  cd {root}")
     if answers is None:
         print("  v3mod add         # scaffold the first mod")
     else:

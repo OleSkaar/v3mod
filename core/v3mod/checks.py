@@ -94,7 +94,7 @@ def cmd_paths(args) -> int:
         ("game", game or "(not found — set V3MOD_GAME_DIR)"),
         ("binary", paths.game_binary(game) or "(not found)"),
         ("tiger", paths.find_tiger(proj.tiger if proj else (ws.tiger if ws else None)) or "(not found)"),
-        ("workspace", ws.root if ws else "(none — run v3mod new)"),
+        ("workspace", ws.root if ws else "(none — cd where you keep mods and run v3mod new)"),
         ("mods in workspace", (", ".join(d.name for d in ws.mod_dirs()) or "(none)") if ws else "(n/a)"),
         ("selected mod", proj.root if proj else "(none — use --mod, or cd into one)"),
     ]
@@ -132,7 +132,8 @@ def cmd_doctor(args) -> int:
     check("user data dir", paths.user_data_dir().exists(), "run the game once")
     check("docs dir (script_docs output)", paths.docs_dir().exists(),
           "in-game console: script_docs, DumpDataTypes")
-    check(f"workspace ({paths.WORKSPACE_NAME})", ws is not None, "run v3mod new <dir>")
+    check(f"workspace ({paths.WORKSPACE_NAME})", ws is not None,
+          "cd to the directory you keep mods in and run v3mod new")
 
     if ws is None:
         return 0 if ok else 1

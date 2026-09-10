@@ -259,7 +259,8 @@ def require_workspace(start: Path | None = None) -> Workspace:
     if ws is None:
         raise SystemExit(
             f"error: no {WORKSPACE_NAME} in this directory or its parents. "
-            "Run `v3mod new <dir>` once to create a workspace, then `v3mod add` for each mod."
+            "cd to the directory you keep mods in and run `v3mod new` once, then `v3mod add` "
+            "for each mod."
         )
     return ws
 
@@ -375,7 +376,8 @@ def resolve_project(args=None, required: bool = False) -> Project | None:
     if required:
         raise SystemExit(
             f"error: no {CONFIG_NAME} or {WORKSPACE_NAME} in this directory or its parents. "
-            "Run `v3mod new <dir>` to create a workspace, or cd into an existing one."
+            "cd to the directory you keep mods in and run `v3mod new`, or cd into an existing "
+            "workspace."
         )
     return None
 
