@@ -102,9 +102,17 @@ def _parse_results(text: str) -> list[tuple[str, str, str]]:
 def cmd_test(args) -> int:
     proj = paths.require_project(args)
     game = Path(proj.game).expanduser() if (proj and proj.game) else paths.game_dir()
-    binary = paths.game_binary(game)
-    if binary is None:
-        raise SystemExit("error: game binary not found; set V3MOD_GAME_DIR or [tools].game")
+    build = paths.game_build(game)
+    if build == "none":
+        raise SystemExit("error: game executable not found; set V3MOD_GAME_DIR or [tools].game")
+    if build == "windows":
+        if paths.proton_runner(args.proton) is None or paths.proton_env(game) is None:
+            raise SystemExit(
+                "error: this is the Windows build and no usable Proton install was found. "
+                "Launch the game once through Steam so the prefix exists, or name a build with "
+                "--proton."
+            )
+        print(f"note: {paths.PROTON_NOTE}")
     ls = paths.launcher_settings(game)
     user_dir = Path(ls["gameDataPath"]) if ls.get("gameDataPath") else paths.user_data_dir()
     result_file = user_dir / RESULT_FILE
@@ -119,7 +127,7 @@ def cmd_test(args) -> int:
     # Launch via the shared launcher so runtime/env handling is identical.
     class A:
         steam = False; direct = True; runtime = args.runtime
-        mod = args.mod
+        mod = args.mod; proton = args.proton
         tests = False; no_save_after_failed_test = False
         flag = ["-nographics", "-handsoff", "-scripted_tests"]
         wait = False; dry_run = args.dry_run
@@ -178,6 +186,7 @@ def cmd_test(args) -> int:
     finally:
         if proc is not None:
             launch_mod.stop_process(proc)
+            launch_mod.stop_wineserver(getattr(A, "_proton", None))
         _restore(renamed)
         if renamed:
             print(f"restored {len(renamed)} vanilla scripted-test file(s)")

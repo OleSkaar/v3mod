@@ -222,10 +222,15 @@ link = {_toml_bool(bool(defaults.get("link", True)))}
 
 [tools]
 # Shared by every mod in the workspace; a mod may override them in its own v3mod.toml.
-# Path to the vic3-tiger executable. Leave empty to search PATH.
+# Every one of these is autodetected when left empty — set one only when detection is wrong.
+# Check what was detected, and from where, with `v3mod paths`.
+# vic3-tiger executable. Empty = search PATH.  Env: V3MOD_TIGER
 tiger = ""
-# Path to the Victoria 3 install (folder containing game/ and binaries/). Leave empty to autodetect.
+# Victoria 3 install (the folder containing game/ and binaries/).  Env: V3MOD_GAME_DIR
 game = ""
+# User data dir: saves, logs, docs and the mod folder the game reads. Under Proton this lives
+# inside the Steam compatdata prefix, not ~/.local/share.  Env: V3MOD_USER_DIR
+user_dir = ""
 '''
 
 
@@ -325,9 +330,10 @@ dir = "mod"            # mod root relative to this file (the folder that is link
 flags = ["-debug_mode"]
 
 # [tools]
-# Uncomment to override the workspace's tiger/game paths for this mod only.
+# Uncomment to override the workspace's paths for this mod only.
 # tiger = ""
 # game = ""
+# user_dir = ""
 '''
 
 
@@ -368,7 +374,7 @@ def mod_readme(a: Answers) -> str:
 
 ## Layout
 
-- `mod/` — the mod itself (linked into `Documents/Paradox Interactive/Victoria 3/mod/`)
+- `mod/` — the mod itself (linked into the game's mod folder; `v3mod paths` shows where that is)
 - `framework/` — tooling state: Tiger baseline, error-log baselines, list of fully overridden files
 
 ## Workflow

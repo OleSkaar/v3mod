@@ -62,9 +62,23 @@ def start_process(args) -> subprocess.Popen | None:
     flags = _flags(proj, args)
 
     binary = paths.game_binary(game)
+    proton: tuple[str, Path] | None = None
+    proton_vars: dict[str, str] | None = None
+    if binary is None and paths.game_build(game) == "windows":
+        # Windows build on Linux: run the .exe through Proton, as Steam itself would.
+        proton = paths.proton_runner(getattr(args, "proton", None))
+        proton_vars = paths.proton_env(game)
+        binary = paths.windows_binary(game)
+        if proton is None or proton_vars is None:
+            missing = "no Proton build found" if proton is None else "no Proton prefix for this game"
+            print(f"game is the Windows build but {missing}; falling back to steam -applaunch. "
+                  "Run the game once through Steam to create the prefix.")
+            binary = None
+
     direct = not args.steam
     if direct and binary is None:
-        print("game binary not found; falling back to steam -applaunch (set V3MOD_GAME_DIR for direct launch)")
+        print("game binary not found; falling back to steam -applaunch "
+              "(set V3MOD_GAME_DIR for direct launch)")
         direct = False
 
     if direct:
@@ -75,6 +89,12 @@ def start_process(args) -> subprocess.Popen | None:
         # running client without a steam_appid.txt file.
         env.setdefault("SteamAppId", str(paths.STEAM_APP_ID))
         env.setdefault("SteamGameId", str(paths.STEAM_APP_ID))
+        proton_note = ""
+        if proton is not None and proton_vars is not None:
+            pname, prun = proton
+            env.update(proton_vars)
+            cmd = [str(prun), "run", *cmd]
+            proton_note = f", through Proton '{pname}'"
         runtime_note = ""
         if args.runtime != "none":
             slr = paths.steam_linux_runtime(args.runtime)
@@ -86,7 +106,8 @@ def start_process(args) -> subprocess.Popen | None:
                 name, run = slr
                 cmd = [str(run), "--", *cmd]
                 runtime_note = f", inside Steam Linux Runtime '{name}'"
-        note = "direct (no launcher, no Steam shader pre-processing; Steam client must be running)" + runtime_note
+        note = ("direct (no launcher, no Steam shader pre-processing; Steam client must be running)"
+                + proton_note + runtime_note)
     else:
         steam = paths.steam_binary()
         if steam is None:
@@ -98,11 +119,32 @@ def start_process(args) -> subprocess.Popen | None:
 
     print(f"launching {note}:\n  {' '.join(cmd)}")
     args._direct, args._flags, args._game, args._proj = direct, flags, game, proj
+    args._proton = proton_vars if direct else None
     if args.dry_run:
         return None
     # New session so the whole tree (Steam runtime wrapper, pressure-vessel, the game) can be
     # stopped as one process group; killing only the wrapper would leave the game running.
     return subprocess.Popen(cmd, cwd=cwd, env=env, start_new_session=True)
+
+
+def stop_wineserver(proton_vars: dict[str, str] | None) -> None:
+    """Ask wineserver to shut the prefix down; killing the process group alone can leave it up."""
+    if not proton_vars:
+        return
+    prefix = Path(proton_vars["STEAM_COMPAT_DATA_PATH"]) / "pfx"
+    runner = paths.proton_runner()
+    if runner is None or not prefix.is_dir():
+        return
+    wineserver = runner[1].parent / "files/bin/wineserver"
+    if not wineserver.exists():
+        return
+    env = os.environ.copy()
+    env["WINEPREFIX"] = str(prefix)
+    try:
+        subprocess.run([str(wineserver), "-k"], env=env, timeout=30,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def stop_process(proc: subprocess.Popen, grace: float = 30.0) -> None:

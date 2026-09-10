@@ -80,9 +80,40 @@ script prefix, `[run].flags`, and an optional `[tools]` block overriding the wor
 Which mod a command acts on: `--mod NAME` if given, else the mod containing the working directory,
 else the workspace's only mod. With several mods and no selection, the command lists them and exits.
 
-## Environment overrides
+## Path resolution
 
-- `V3MOD_GAME_DIR` — game install (the folder containing `game/` and `binaries/`)
-- `V3MOD_USER_DIR` — user data dir (default `~/.local/share/Paradox Interactive/Victoria 3`)
+Nothing path-shaped is hardcoded. Each path is resolved as **environment variable → `[tools]` in
+config → autodetect**, and `v3mod paths` prints every result with the source it came from, so you
+can see what was detected before deciding to override it.
 
-Game detection also reads every library in `steamapps/libraryfolders.vdf`.
+| Path | Env | Config | Autodetected from |
+|---|---|---|---|
+| Game install | `V3MOD_GAME_DIR` | `[tools].game` | Steam library roots plus every library in `steamapps/libraryfolders.vdf` |
+| User data | `V3MOD_USER_DIR` | `[tools].user_dir` | `<game>/launcher/launcher-settings.json` (`gameDataPath`), else `$XDG_DATA_HOME/Paradox Interactive/Victoria 3`, else the flatpak Steam path |
+| Tiger | `V3MOD_TIGER` | `[tools].tiger` | `PATH` |
+
+`launcher-settings.json` is the game's own answer for where it keeps saves, logs and mods, so it
+wins over any guess. Its `$LINUX_DATA_HOME` and `%USER_DOCUMENTS%` placeholders are expanded from
+the environment rather than assumed.
+
+### Proton installs
+
+Victoria 3 on Linux may be the **Windows build** running under Proton. Then `%USER_DOCUMENTS%`
+resolves *inside the Proton prefix* —
+`steamapps/compatdata/529340/pfx/drive_c/users/steamuser/Documents/…` — not `~/.local/share`, and
+that prefix is the mod folder the game actually reads. v3mod detects the prefix and resolves to it.
+
+v3mod runs a Windows build through Proton, the same way Steam would:
+
+```
+SteamLinuxRuntime_sniper/run -- <proton>/proton run <game>/binaries/victoria3.exe <flags>
+```
+
+with `STEAM_COMPAT_DATA_PATH` and `STEAM_COMPAT_CLIENT_INSTALL_PATH` set. The Proton build is the
+one Steam already bound to this game (read from `compatdata/<appid>/version`); override it with
+`--proton NAME`. This keeps `v3mod launch` and headless `v3mod test` working on a Proton install —
+the Windows executable accepts the same `-nographics -handsoff -scripted_tests` flags.
+
+The prefix must exist, so launch the game once through Steam before the first `v3mod test`. After a
+run, v3mod calls `wineserver -k` on the prefix: killing the process group alone can leave wineserver
+holding it open.

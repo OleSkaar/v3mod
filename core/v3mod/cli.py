@@ -135,6 +135,9 @@ def build_parser() -> argparse.ArgumentParser:
     la.add_argument("--no-save-after-failed-test", action="store_true")
     la.add_argument("--flag", action="append", metavar="FLAG", help="extra launch flag (repeatable)")
     la.add_argument("--wait", action="store_true", help="block until the process exits")
+    la.add_argument("--proton", metavar="NAME",
+                    help="Proton build to run a Windows install with (default: the one Steam "
+                         "already bound to this game)")
     la.add_argument("--dry-run", action="store_true", help="print the command only")
     _mod_selector(la)
     la.set_defaults(func=launch.cmd_launch)
@@ -159,6 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--flag", action="append", metavar="FLAG", help="extra launch flag (repeatable)")
     t.add_argument("--poll", type=int, default=15, help="seconds between checks of tests.txt (default 15)")
     t.add_argument("--timeout", type=int, default=180, help="minutes to wait for results (default 180)")
+    t.add_argument("--proton", metavar="NAME", help="Proton build to use for a Windows install")
     t.add_argument("--dry-run", action="store_true")
     _mod_selector(t)
     t.set_defaults(func=testing.cmd_test)

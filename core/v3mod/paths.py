@@ -16,6 +16,7 @@ import re
 import shutil
 import tomllib
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 CONFIG_NAME = "v3mod.toml"
@@ -24,20 +25,80 @@ DEFAULT_MODS_DIR = "mods"
 STEAM_APP_ID = 529340
 
 
-def user_data_dir() -> Path:
-    """Documents/Paradox Interactive/Victoria 3 (or Linux equivalent)."""
-    env = os.environ.get("V3MOD_USER_DIR")
+PDX_SUBDIR = "Paradox Interactive/Victoria 3"
+
+
+def xdg_data_home() -> Path:
+    """$XDG_DATA_HOME, or its spec default. Never assume ~/.local/share directly."""
+    env = os.environ.get("XDG_DATA_HOME")
     if env:
         return Path(env)
-    system = platform.system()
-    if system == "Linux":
-        native = Path.home() / ".local/share/Paradox Interactive/Victoria 3"
-        flatpak = Path.home() / ".var/app/com.valvesoftware.Steam/.local/share/Paradox Interactive/Victoria 3"
+    return Path.home() / ".local/share"
+
+
+def documents_dir() -> Path:
+    """The Windows/macOS Documents folder. On Windows this can be redirected (OneDrive)."""
+    for var in ("OneDrive", "USERPROFILE"):
+        base = os.environ.get(var)
+        if base and (Path(base) / "Documents").is_dir():
+            return Path(base) / "Documents"
+    return Path.home() / "Documents"
+
+
+@lru_cache(maxsize=1)
+def _config_tools() -> dict:
+    """The nearest workspace's [tools] table, so paths can be pinned in config, not just env.
+
+    Cached: within one CLI run the working directory does not move.
+    """
+    try:
+        cur = Path.cwd().resolve()
+    except OSError:
+        return {}
+    for candidate in (cur, *cur.parents):
+        for name in (CONFIG_NAME, WORKSPACE_NAME):
+            cfg = candidate / name
+            if cfg.exists():
+                try:
+                    tools = tomllib.loads(cfg.read_text(encoding="utf-8")).get("tools", {})
+                except (OSError, tomllib.TOMLDecodeError):
+                    tools = {}
+                if tools:
+                    return tools
+    return {}
+
+
+def _autodetect_user_data_dir() -> tuple[Path, str]:
+    """Where the game keeps saves, logs, mods and settings, and how we worked that out."""
+    # The game's own launcher-settings.json is authoritative when we can find the install.
+    gdir, _ = resolve_game_dir()
+    if gdir is not None:
+        dp = launcher_settings(gdir).get("gameDataPath") or ""
+        if dp and Path(dp).is_dir():
+            return Path(dp), "launcher-settings.json"
+
+    if platform.system() == "Linux":
+        native = xdg_data_home() / PDX_SUBDIR
+        flatpak = Path.home() / ".var/app/com.valvesoftware.Steam/.local/share" / PDX_SUBDIR
         if not native.exists() and flatpak.exists():
-            return flatpak
-        return native
-    # Windows and macOS both use Documents
-    return Path.home() / "Documents/Paradox Interactive/Victoria 3"
+            return flatpak, "autodetected (flatpak Steam)"
+        return native, "autodetected"
+    return documents_dir() / PDX_SUBDIR, "autodetected"
+
+
+def resolve_user_data_dir() -> tuple[Path, str]:
+    env = os.environ.get("V3MOD_USER_DIR")
+    if env:
+        return Path(env).expanduser(), "V3MOD_USER_DIR"
+    cfg = _config_tools().get("user_dir")
+    if cfg:
+        return Path(cfg).expanduser(), f"[tools].user_dir"
+    return _autodetect_user_data_dir()
+
+
+def user_data_dir() -> Path:
+    """<XDG_DATA_HOME>/Paradox Interactive/Victoria 3, or the platform equivalent."""
+    return resolve_user_data_dir()[0]
 
 
 def mods_dir() -> Path:
@@ -91,15 +152,23 @@ def _libraries_from_vdf() -> list[Path]:
     return out
 
 
-def game_dir() -> Path | None:
+@lru_cache(maxsize=1)
+def resolve_game_dir() -> tuple[Path | None, str]:
     env = os.environ.get("V3MOD_GAME_DIR")
     if env:
-        return Path(env)
+        return Path(env).expanduser(), "V3MOD_GAME_DIR"
+    cfg = _config_tools().get("game")
+    if cfg:
+        return Path(cfg).expanduser(), "[tools].game"
     for root in _steam_library_candidates() + _libraries_from_vdf():
         candidate = root / "steamapps/common/Victoria 3"
         if (candidate / "game").is_dir():
-            return candidate
-    return None
+            return candidate, "autodetected (Steam library)"
+    return None, "not found — set [tools].game or V3MOD_GAME_DIR"
+
+
+def game_dir() -> Path | None:
+    return resolve_game_dir()[0]
 
 
 def steam_linux_runtime(name: str = "auto") -> tuple[str, Path] | None:
@@ -114,6 +183,92 @@ def steam_linux_runtime(name: str = "auto") -> tuple[str, Path] | None:
             if run.exists():
                 return n, run
     return None
+
+
+def proton_prefix() -> Path | None:
+    """<library>/steamapps/compatdata/<appid>/pfx — present when the game runs under Proton."""
+    for root in _steam_library_candidates() + _libraries_from_vdf():
+        pfx = root / f"steamapps/compatdata/{STEAM_APP_ID}/pfx"
+        if (pfx / "drive_c").is_dir():
+            return pfx
+    return None
+
+
+def proton_documents() -> Path | None:
+    """The Documents folder *inside* the Proton prefix, which is what %USER_DOCUMENTS% means there."""
+    pfx = proton_prefix()
+    if pfx is None:
+        return None
+    users = pfx / "drive_c/users"
+    for name in ("steamuser", os.environ.get("USER") or "", os.environ.get("USERNAME") or ""):
+        if name and (users / name / "Documents").is_dir():
+            return users / name / "Documents"
+    return None
+
+
+def steam_root() -> Path | None:
+    """The Steam client install root (STEAM_COMPAT_CLIENT_INSTALL_PATH)."""
+    for root in _steam_library_candidates():
+        if (root / "steamapps").is_dir():
+            return root
+    return None
+
+
+def _proton_dirs() -> list[Path]:
+    out: list[Path] = []
+    for root in _steam_library_candidates() + _libraries_from_vdf():
+        out.append(root / "compatibilitytools.d")
+        out.append(root / "steamapps/common")
+    return out
+
+
+def proton_runner(preferred: str | None = None) -> tuple[str, Path] | None:
+    """Locate a Proton runner script. Returns (name, path to `proton`) or None.
+
+    `preferred` names a specific build; by default we use the one Steam already bound to this
+    game, recorded in compatdata/<appid>/version, so v3mod runs what Steam would run.
+    """
+    names: list[str] = []
+    if preferred:
+        names.append(preferred)
+    else:
+        pfx = proton_prefix()
+        if pfx is not None:
+            try:
+                recorded = (pfx.parent / "version").read_text(encoding="utf-8").strip()
+            except OSError:
+                recorded = ""
+            if recorded:
+                names.append(recorded)
+    for name in names:
+        for base in _proton_dirs():
+            run = base / name / "proton"
+            if run.is_file():
+                return name, run
+    # Whatever Proton is installed, newest-looking last-resort.
+    found: list[tuple[str, Path]] = []
+    for base in _proton_dirs():
+        if not base.is_dir():
+            continue
+        for d in base.iterdir():
+            if (d / "proton").is_file():
+                found.append((d.name, d / "proton"))
+    if found:
+        found.sort(key=lambda t: t[0])
+        return found[-1]
+    return None
+
+
+def proton_env(gdir: Path | None) -> dict[str, str] | None:
+    """The two variables Proton requires, or None if we cannot fill them in."""
+    pfx = proton_prefix()
+    root = steam_root()
+    if pfx is None or root is None:
+        return None
+    return {
+        "STEAM_COMPAT_DATA_PATH": str(pfx.parent),
+        "STEAM_COMPAT_CLIENT_INSTALL_PATH": str(root),
+    }
 
 
 def os_release_id() -> str:
@@ -138,23 +293,42 @@ def steam_binary() -> str | None:
 
 
 def game_binary(gdir: Path | None) -> Path | None:
+    """The executable this platform can run directly. A .exe on Linux is *not* directly runnable."""
     if gdir is None:
         return None
-    system = platform.system()
-    if system == "Windows":
-        exe = gdir / "binaries/victoria3.exe"
-    elif system == "Darwin":
-        exe = gdir / "binaries/victoria3"
-    else:
-        exe = gdir / "binaries/victoria3"
+    name = "victoria3.exe" if platform.system() == "Windows" else "victoria3"
+    exe = gdir / "binaries" / name
     return exe if exe.exists() else None
+
+
+def windows_binary(gdir: Path | None) -> Path | None:
+    """binaries/victoria3.exe, whatever platform we are on."""
+    if gdir is None:
+        return None
+    exe = gdir / "binaries/victoria3.exe"
+    return exe if exe.exists() else None
+
+
+def game_build(gdir: Path | None) -> str:
+    """'native', 'windows' (needs Proton/Wine on Linux), or 'none'."""
+    if game_binary(gdir) is not None:
+        return "native"
+    if windows_binary(gdir) is not None:
+        return "windows"
+    return "none"
+
+
+PROTON_NOTE = (
+    "this is the Windows build; on Linux v3mod runs it through Proton "
+    "(`proton run`, with the Proton build Steam already bound to this game)."
+)
 
 
 def launcher_settings(gdir: Path | None) -> dict:
     """Read <game>/launcher/launcher-settings.json (gameId, gameDataPath, exePath, dlcPath).
 
-    gameDataPath uses placeholders: $LINUX_DATA_HOME (~/.local/share) on Linux,
-    %USER_DOCUMENTS% on Windows. Returns {} if unavailable.
+    gameDataPath uses placeholders: $LINUX_DATA_HOME on Linux, %USER_DOCUMENTS% on Windows.
+    Both are expanded from the environment, not assumed. Returns {} if unavailable.
     """
     if gdir is None:
         return {}
@@ -165,22 +339,35 @@ def launcher_settings(gdir: Path | None) -> dict:
     except (OSError, ValueError):
         return {}
     dp = data.get("gameDataPath", "")
-    dp = dp.replace("$LINUX_DATA_HOME", str(Path.home() / ".local/share"))
-    dp = dp.replace("%USER_DOCUMENTS%", str(Path.home() / "Documents"))
+    dp = dp.replace("$LINUX_DATA_HOME", str(xdg_data_home()))
+    if "%USER_DOCUMENTS%" in dp:
+        # A Windows build under Proton writes into the prefix, not the Linux home.
+        docs = proton_documents() if platform.system() == "Linux" else None
+        dp = dp.replace("%USER_DOCUMENTS%", str(docs or documents_dir()))
     data["gameDataPath"] = str(Path(dp)) if dp else ""
     return data
 
 
-def find_tiger(configured: str | None = None) -> str | None:
+def resolve_tiger(configured: str | None = None) -> tuple[str | None, str]:
+    env = os.environ.get("V3MOD_TIGER")
+    if env:
+        p = Path(env).expanduser()
+        if p.exists():
+            return str(p), "V3MOD_TIGER"
+    configured = configured or _config_tools().get("tiger")
     if configured:
         p = Path(configured).expanduser()
         if p.exists():
-            return str(p)
+            return str(p), "[tools].tiger"
     for name in ("vic3-tiger", "vic3-tiger.exe"):
         found = shutil.which(name)
         if found:
-            return found
-    return None
+            return found, "autodetected (PATH)"
+    return None, "not found — set [tools].tiger or V3MOD_TIGER"
+
+
+def find_tiger(configured: str | None = None) -> str | None:
+    return resolve_tiger(configured)[0]
 
 
 @dataclass

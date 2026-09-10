@@ -81,26 +81,38 @@ def _game_for(proj, ws=None) -> Path | None:
 def cmd_paths(args) -> int:
     ws = paths.find_workspace()
     proj = paths.resolve_project(args)
-    game = _game_for(proj, ws)
+    user_dir, user_src = paths.resolve_user_data_dir()
+    game, game_src = paths.resolve_game_dir()
+    if proj and proj.game:  # a mod may pin its own install
+        game, game_src = Path(proj.game).expanduser(), "[tools].game (this mod)"
+    tiger, tiger_src = paths.resolve_tiger(proj.tiger if proj else None)
+
+    # (label, value, where it came from) — an empty source means "derived from the row above"
     rows = [
-        ("OS", platform.system()),
-        ("user data", paths.user_data_dir()),
-        ("mods", paths.mods_dir()),
-        ("logs", paths.logs_dir()),
-        ("docs", paths.docs_dir()),
-        ("distro", paths.os_release_id() or "(unknown)"),
-        ("steam", paths.steam_binary() or "(not found)"),
-        ("steam runtime", (lambda r: f"{r[0]}: {r[1]}" if r else "(not found)")(paths.steam_linux_runtime("auto"))),
-        ("game", game or "(not found — set V3MOD_GAME_DIR)"),
-        ("binary", paths.game_binary(game) or "(not found)"),
-        ("tiger", paths.find_tiger(proj.tiger if proj else (ws.tiger if ws else None)) or "(not found)"),
-        ("workspace", ws.root if ws else "(none — cd where you keep mods and run v3mod new)"),
-        ("mods in workspace", (", ".join(d.name for d in ws.mod_dirs()) or "(none)") if ws else "(n/a)"),
-        ("selected mod", proj.root if proj else "(none — use --mod, or cd into one)"),
+        ("OS", platform.system(), ""),
+        ("distro", paths.os_release_id() or "(unknown)", ""),
+        ("user data", user_dir, user_src),
+        ("mods", paths.mods_dir(), ""),
+        ("logs", paths.logs_dir(), ""),
+        ("docs", paths.docs_dir(), ""),
+        ("game", game or "(not found)", game_src),
+        ("binary", paths.game_binary(game) or paths.windows_binary(game) or "(not found)",
+         {"native": "native Linux build", "windows": "Windows build — runs via Proton",
+          "none": "no executable found"}[paths.game_build(game)]),
+        ("steam", paths.steam_binary() or "(not found)", ""),
+        ("steam runtime",
+         (lambda r: f"{r[0]}: {r[1]}" if r else "(not found)")(paths.steam_linux_runtime("auto")), ""),
+        ("tiger", tiger or "(not found)", tiger_src),
+        ("workspace", ws.root if ws else "(none — cd where you keep mods and run v3mod new)", ""),
+        ("mods in workspace", (", ".join(d.name for d in ws.mod_dirs()) or "(none)") if ws else "(n/a)", ""),
+        ("selected mod", proj.root if proj else "(none — use --mod, or cd into one)", ""),
     ]
-    width = max(len(k) for k, _ in rows)
-    for k, v in rows:
-        print(f"{k:<{width}}  {v}")
+    width = max(len(k) for k, _, _ in rows)
+    vwidth = max((len(str(v)) for _, v, src in rows if src), default=0)
+    for k, v, src in rows:
+        print(f"{k:<{width}}  {str(v):<{vwidth if src else 0}}" + (f"  ({src})" if src else ""))
+    print("\nOverride any of these with V3MOD_USER_DIR / V3MOD_GAME_DIR / V3MOD_TIGER, or with "
+          "[tools] user_dir / game / tiger in v3mod-workspace.toml.")
     return 0
 
 
@@ -128,7 +140,10 @@ def cmd_doctor(args) -> int:
     check("vic3-tiger", paths.find_tiger(proj.tiger if proj else (ws.tiger if ws else None)) is not None,
           "https://github.com/amtep/tiger/releases")
     check("Victoria 3 install", game is not None, "set V3MOD_GAME_DIR or [tools].game")
-    check("victoria3 binary", paths.game_binary(game) is not None)
+    build = paths.game_build(game)
+    check("victoria3 executable", build != "none", "verify the game files in Steam")
+    if build == "windows":
+        print(f"[info] {paths.PROTON_NOTE}")
     check("user data dir", paths.user_data_dir().exists(), "run the game once")
     check("docs dir (script_docs output)", paths.docs_dir().exists(),
           "in-game console: script_docs, DumpDataTypes")
