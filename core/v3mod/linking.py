@@ -26,6 +26,13 @@ def _is_link(p: Path) -> bool:
     return False
 
 
+def _remove_link(target: Path) -> None:
+    if platform.system() == "Windows":
+        os.rmdir(target)  # removes a junction without touching its contents
+    else:
+        target.unlink()
+
+
 def link_mod(mod_dir: Path, link_name: str) -> Path:
     mods = paths.mods_dir()
     mods.mkdir(parents=True, exist_ok=True)
@@ -37,8 +44,14 @@ def link_mod(mod_dir: Path, link_name: str) -> Path:
             existing = Path(os.path.realpath(target))
             if existing == mod_dir:
                 return target
-            raise FileExistsError(f"{target} is already a link to {existing}")
-        raise FileExistsError(f"{target} exists and is a real directory")
+            if not target.exists():
+                # Points at something that no longer exists: stale, and safe to replace.
+                print(f"  replacing stale link {target.name} -> {existing}")
+                _remove_link(target)
+            else:
+                raise FileExistsError(f"{target} is already a link to {existing}")
+        else:
+            raise FileExistsError(f"{target} exists and is a real directory")
 
     if platform.system() == "Windows":
         subprocess.run(["cmd", "/c", "mklink", "/J", str(target), str(mod_dir)],
@@ -54,10 +67,7 @@ def unlink_mod(link_name: str) -> Path:
         raise FileNotFoundError(f"{target} does not exist")
     if not _is_link(target):
         raise IsADirectoryError(f"{target} is a real directory, refusing to delete")
-    if platform.system() == "Windows":
-        os.rmdir(target)  # removes junction without touching contents
-    else:
-        target.unlink()
+    _remove_link(target)
     return target
 
 
@@ -87,6 +97,16 @@ def cmd_link(args) -> int:
 
 
 def cmd_unlink(args) -> int:
+    if args.name and not getattr(args, "all", False):
+        # A name alone is enough to clean up a link, even with no workspace or mod left.
+        try:
+            target = unlink_mod(args.name)
+        except (FileNotFoundError, IsADirectoryError, OSError) as e:
+            print(f"! {e}")
+            return 1
+        print(f"removed {target}")
+        return 0
+
     failed = 0
     for proj in _selected(args):
         name = args.name or proj.root.name

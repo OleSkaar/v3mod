@@ -13,6 +13,7 @@ Layout produced:
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -638,6 +639,11 @@ def cmd_mods(args) -> int:
     width = max(len(m.root.name) for m in mods)
     for m in mods:
         link = mods_root / m.root.name
-        state = "linked" if link.is_symlink() or link.exists() else "not linked"
+        if link.exists():
+            state = "linked"
+        elif link.is_symlink():
+            state = f"STALE LINK -> {os.path.realpath(link)}"
+        else:
+            state = "not linked"
         print(f"  {m.root.name:<{width}}  {m.label}  [{m.mod_id or 'no id'}]  {state}")
     return 0
