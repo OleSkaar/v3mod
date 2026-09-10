@@ -41,6 +41,10 @@ v3mod test                        # headless scripted-test run
 Every mod command acts on the mod you're standing in; from the workspace root, name it with
 `--mod <dir>` (or `--all`, where it makes sense).
 
+`v3mod link` is the development loop — the game watches the linked folder, so edits are live.
+`v3mod build` is for release: a clean copy without scripted tests or tooling files, optionally
+version-stamped and zipped.
+
 Each piece has its own README with the details.
 
 ## Design notes

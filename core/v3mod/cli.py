@@ -12,7 +12,7 @@ import os
 import sys
 
 from . import __version__
-from . import checks, launch, linking, lint, scaffold, testing
+from . import build, checks, launch, linking, lint, scaffold, testing
 
 
 def _not_implemented(name: str, doc_section: str):
@@ -101,6 +101,21 @@ def build_parser() -> argparse.ArgumentParser:
     l.add_argument("--all", action="store_true", help="lint every mod in the workspace")
     _mod_selector(l)
     l.set_defaults(func=lint.cmd_lint)
+
+    # build -----------------------------------------------------------------
+    b = sub.add_parser("build", help="copy a mod to a clean folder ready for packaging/publishing")
+    b.add_argument("--zip", action="store_true", help="also write <dir>-<version>.zip beside it")
+    b.add_argument("--set-version", metavar="X.Y.Z",
+                   help="stamp this version into the built metadata.json (leaves the source alone)")
+    b.add_argument("--with-tests", action="store_true",
+                   help=f"keep {build.TEST_DIR}/ in the output (left out by default)")
+    b.add_argument("--out", metavar="DIR",
+                   help="parent directory for the build (default: the mod's framework/build/)")
+    b.add_argument("--force", action="store_true",
+                   help="overwrite an --out directory v3mod did not create")
+    b.add_argument("--all", action="store_true", help="build every mod in the workspace")
+    _mod_selector(b)
+    b.set_defaults(func=build.cmd_build)
 
     # link / unlink ---------------------------------------------------------
     lnk = sub.add_parser("link", help="symlink mod/ into the game's mod folder")

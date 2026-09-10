@@ -240,6 +240,7 @@ def workspace_gitignore() -> str:
 mods/*/framework/baseline/*.log
 mods/*/framework/run/
 mods/*/framework/test-output/
+mods/*/framework/build/
 *.log
 .DS_Store
 Thumbs.db
@@ -276,9 +277,13 @@ mod when run from inside `mods/<dir>/`:
 v3mod lint --mod <dir>     # Tiger
 v3mod lint --ci --all      # every mod; non-zero exit on new findings
 v3mod test --mod <dir>     # headless scripted tests
-v3mod link --mod <dir>     # symlink into the game's mod folder
+v3mod link --mod <dir>     # symlink into the game's mod folder (the dev loop)
+v3mod build --mod <dir>    # clean copy for publishing; --zip for an archive
 v3mod paths                # resolved directories on this machine
 ```
+
+`link` is the development path: the game watches `mod/` directly, so edits are live. `build` is for
+release — it copies the mod without scripted tests or tooling files, and can stamp a version.
 
 ## Conventions
 

@@ -42,14 +42,15 @@ cp /tmp/vic3-tiger-linux-v1.19.0/vic3-tiger ~/.local/bin/ && chmod +x ~/.local/b
 | `v3mod test` | Headless scripted tests: `-nographics -handsoff -scripted_tests`, hides vanilla's own tests for the run, polls `tests.txt`, stops the process group, copies results and `TEST_FAIL_*.v3` saves to `framework/test-output/<timestamp>/`, prints a table, exits 1 on failure. |
 | `v3mod launch` | Runs the binary directly inside the Steam Linux Runtime with `SteamAppId` set: no Paradox launcher, no Steam shader pre-processing. `--steam` for the old path. |
 | `v3mod flags` | Probes the binary for known engine flags (`-nographics`, `-handsoff`, `-continuelastsave`, …). |
-| `v3mod link` / `unlink` | Symlink `mod/` into `~/.local/share/Paradox Interactive/Victoria 3/mod/<dir>`. |
+| `v3mod link` / `unlink` | Symlink `mod/` into the game's mod folder. **This is the dev loop** — the engine watches the linked folder, so edits are live with no build step. |
+| `v3mod build` | Clean copy of a mod for publishing: no scripted tests, no tiger config, no editor droppings. `--set-version` stamps the built `metadata.json` without touching the source, `--zip` writes `<dir>-<version>.zip`. Output lands in `framework/build/`. |
 | `v3mod check-overrides` | Fails if a mod file shadows a vanilla file and isn't declared in `framework/overrides.txt`. |
 | `v3mod playset show` / `enable` | Inspect/edit the launcher's `dlc_load.json`. |
 | `v3mod paths` / `doctor` | Resolved directories; toolchain health. |
 | `v3mod sync` | Planned: patch-upgrade helper. |
 
 Every command that acts on a mod takes `--mod NAME` to pick one from the workspace root; `lint`,
-`check-overrides`, `link` and `unlink` also take `--all`. Inside `mods/<dir>/` neither is needed.
+`check-overrides`, `link`, `unlink` and `build` also take `--all`. Inside `mods/<dir>/` neither is needed.
 
 Error-log tooling and settings profiles are separate add-ons (`v3mod-errors`, `v3mod-settings`).
 
@@ -79,6 +80,30 @@ script prefix, `[run].flags`, and an optional `[tools]` block overriding the wor
 
 Which mod a command acts on: `--mod NAME` if given, else the mod containing the working directory,
 else the workspace's only mod. With several mods and no selection, the command lists them and exits.
+
+## Link for development, build for release
+
+These are not two ways to do one thing.
+
+`v3mod link` symlinks `mod/` into the game's mod folder. The engine has its own file watcher and
+reload dispatchers, so with the link in place it is already looking at your working tree — saving a
+file is the whole loop, and there is no copy step to forget. Keep this for development.
+
+`v3mod build` copies the mod somewhere clean for publishing. It exists for the moment you hand the
+mod to someone else, and it does the things a symlink cannot: leave `tools/scripted_tests/` and
+`vic3-tiger.conf` out, drop `.gitkeep` and editor backups, stamp a release version into
+`metadata.json` without touching your source, and zip the result with the mod directory at the
+archive's top level.
+
+```bash
+v3mod build                        # -> mods/<dir>/framework/build/<dir>/
+v3mod build --set-version 1.2.0 --zip
+v3mod build --all                  # every mod in the workspace
+```
+
+Build output is cleaned and rewritten each run. Only a directory v3mod created (marked with
+`.v3mod-build`) is ever removed — an `--out` pointing anywhere else is refused unless you pass
+`--force`.
 
 ## Path resolution
 

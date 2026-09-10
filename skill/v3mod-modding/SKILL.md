@@ -88,6 +88,7 @@ v3mod lint --ci --all        the same for every mod in the workspace
 v3mod check-overrides        fails on undeclared full-file overrides of vanilla
 v3mod test                   headless scripted-test run, prints OK/FAIL table
 v3mod launch                 straight into the game, debug mode, no launcher
+v3mod build                  clean copy for publishing (release only, not the dev loop)
 v3mod-errors --mine          error.log lines referencing this mod   (optional add-on)
 v3mod-errors --conflicts     which file won each override            (optional add-on)
 ```

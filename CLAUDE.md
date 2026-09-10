@@ -20,7 +20,7 @@ Four independent pieces; only `core` is required, and core knows nothing about t
 
 | Path | Package / install | Role |
 |---|---|---|
-| `core/` | `v3mod` (`pipx install --editable ./core`) | The CLI: `new`, `add`, `mods`, `lint`, `test`, `launch`, `link`, `playset`, `paths`, `doctor`. |
+| `core/` | `v3mod` (`pipx install --editable ./core`) | The CLI: `new`, `add`, `mods`, `lint`, `test`, `launch`, `link`, `build`, `playset`, `paths`, `doctor`. |
 | `errors/` | `v3mod-errors` | Optional: filter `error.log` to this mod, diff a vanilla baseline, read `database_conflicts.log`. |
 | `settings/` | `v3mod-settings` | Optional: named `pdx_settings.json` profiles. Only for manual sessions — `v3mod test` is headless. |
 | `skill/v3mod-modding/` | copied to `~/.claude/skills/` | Agent Skill teaching the workflow; calls the CLI. |
@@ -46,6 +46,11 @@ Each piece has its own README with the details; the root `README.md` is the over
 - **Mod folders stay clean**: a scaffolded mod contains mod content plus `v3mod.toml` and
   `framework/` — no `CLAUDE.md`, no tooling. The skill stays global in `~/.claude/skills/`, not
   in the workspace. That rule is about *mod* content; this file is the tooling repo's own guide.
+- **Link for development, build for release.** `v3mod link` symlinks `mod/` into the game's mod
+  folder; the engine's own file watcher then sees edits live, so there is no copy step in the dev
+  loop and no watch mode to write. `v3mod build` is only for publishing — a clean copy without
+  scripted tests or tooling files, optionally version-stamped and zipped. Don't reintroduce a
+  deploy-on-save path; it would sit in front of the engine's watcher and add nothing.
 - The community owns most of the stack — Tiger validates, the engine runs scripted tests natively
   (`-nographics -handsoff -scripted_tests`). `v3mod` is the Linux glue and the scaffold.
 
