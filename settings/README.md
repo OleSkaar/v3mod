@@ -3,7 +3,7 @@
 Named profiles of the game's `pdx_settings.json`. Add-on to [`v3mod`](../core).
 
 ```bash
-pipx install --editable ~/Tools/v3mod/settings
+pipx install --editable ./settings    # from the root of this repo
 ```
 
 ## Do you need this?

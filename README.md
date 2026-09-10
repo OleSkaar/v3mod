@@ -5,9 +5,9 @@ small and nothing you don't use is in the way.
 
 | Piece | Install | What it is |
 |---|---|---|
-| **`core/`** | `pipx install --editable ~/Tools/v3mod/core` | The CLI: scaffold, lint via Tiger, link, launch, headless scripted tests, playset, doctor. |
-| **`errors/`** | `pipx install --editable ~/Tools/v3mod/errors` | `v3mod-errors`: filter `error.log` to your mod, diff against a vanilla baseline, read `database_conflicts.log`. **Optional.** |
-| **`settings/`** | `pipx install --editable ~/Tools/v3mod/settings` | `v3mod-settings`: named `pdx_settings.json` profiles (potato vs play). **Optional** — headless test runs render nothing, so this is only for manual sessions. |
+| **`core/`** | `pipx install --editable ./core` | The CLI: scaffold, lint via Tiger, link, launch, headless scripted tests, playset, doctor. |
+| **`errors/`** | `pipx install --editable ./errors` | `v3mod-errors`: filter `error.log` to your mod, diff against a vanilla baseline, read `database_conflicts.log`. **Optional.** |
+| **`settings/`** | `pipx install --editable ./settings` | `v3mod-settings`: named `pdx_settings.json` profiles (potato vs play). **Optional** — headless test runs render nothing, so this is only for manual sessions. |
 | **`skill/`** | `cp -r skill/v3mod-modding ~/.claude/skills/` | Agent Skill teaching Claude the workflow; calls the CLI. |
 
 **Only `core` is required.** `errors`, `settings` and the skill are each independent and each
@@ -18,7 +18,7 @@ optional; core has no knowledge of them and works fully without any of them inst
 Mods live together in one **workspace** — a monorepo with shared defaults, created once:
 
 ```bash
-pipx install --editable ~/Tools/v3mod/core
+pipx install --editable ./core    # from the root of this repo
 v3mod doctor                      # checks git, steam, tiger, game install, Steam Linux Runtime
 v3mod new ~/Mods/V3               # workspace + its first mod (one git repo)
 cd ~/Mods/V3

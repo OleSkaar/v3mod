@@ -6,16 +6,21 @@ Python 3.11+, standard library only. **Target: Linux** (native Steam).
 
 ## Install
 
+From the root of this repository, wherever you cloned it:
+
 ```bash
-pipx install --editable ~/Tools/v3mod/core
+pipx install --editable ./core
 pipx ensurepath
 ```
+
+`--editable` points the install at this working tree, so pulling or editing takes effect without
+reinstalling. Check what a given `v3mod` is running from with `pipx list`.
 
 On Bazzite / Fedora Atomic, get pipx from Homebrew (`brew install pipx`) — not `dnf`, not system
 `pip` (PEP 668 blocks it). A plain venv works too:
 
 ```bash
-python3 -m venv ~/.venvs/v3mod && ~/.venvs/v3mod/bin/pip install -e ~/Tools/v3mod/core
+python3 -m venv ~/.venvs/v3mod && ~/.venvs/v3mod/bin/pip install -e ./core
 ln -s ~/.venvs/v3mod/bin/v3mod ~/.local/bin/v3mod
 ```
 
@@ -51,7 +56,7 @@ Error-log tooling and settings profiles are separate add-ons (`v3mod-errors`, `v
 ## Layout
 
 ```
-~/Tools/v3mod/                                             this tool
+<this repo>/                                               the tooling (installed with pipx)
 ~/Mods/V3/                                                 the workspace (`v3mod new ~/Mods/V3`), one git repo
 ~/Mods/V3/v3mod-workspace.toml                             shared defaults and tool paths; marks the root
 ~/Mods/V3/mods/<dir>/                                      one mod: v3mod.toml, README, framework/

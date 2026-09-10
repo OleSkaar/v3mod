@@ -4,7 +4,7 @@ Error-log tooling for Victoria 3 mods. **Optional** add-on to [`v3mod`](../core)
 fully without it; install only if you want log filtering from the CLI.
 
 ```bash
-pipx install --editable ~/Tools/v3mod/errors
+pipx install --editable ./errors    # from the root of this repo
 ```
 
 ## Why
