@@ -48,8 +48,12 @@ skill alongside this one. That skill owns *game* knowledge; this one owns the *w
 
 ```bash
 git clone --depth 1 https://github.com/JDeffner/paradox-ai-modding /tmp/pam
-cp -r /tmp/pam/skills/vic3-modding ~/.claude/skills/
+cp -r /tmp/pam/plugins/paradox-ai-modding/skills/vic3-modding ~/.claude/skills/
 ```
+
+That skill detects the game and user-data directories itself, using the locations that are typical
+on Windows. On a Proton install those guesses are wrong — the user data lives inside the Steam
+compatdata prefix — so prefer `v3mod paths` when the two disagree.
 
 ## Requires
 
