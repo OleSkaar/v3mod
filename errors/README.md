@@ -17,6 +17,7 @@ log down to what you changed, and diffs a run against a saved vanilla baseline.
 ```bash
 v3mod-errors --tail 50            # end of the log
 v3mod-errors --mine               # only lines referencing this mod's files
+v3mod-errors --mine --mod pp      # ...when run from the workspace root, name the mod
 v3mod-errors --grep 'journal'     # regex filter
 v3mod-errors --conflicts          # database_conflicts.log: which file won each override
 
@@ -26,7 +27,9 @@ v3mod-errors --diff vanilla_1_13_9   # exit 1 if there are new lines
 ```
 
 Baselines are normalised (timestamps stripped, long numbers replaced) and stored in
-`framework/baseline/<name>.txt` inside the mod repo.
+`framework/baseline/<name>.txt` inside the mod's own directory. `--mine`, `--baseline` and `--diff`
+resolve which mod that is the same way core does: `--mod NAME`, else the working directory, else the
+workspace's only mod.
 
 New lines in *vanilla* files still matter — they're often caused by your mod removing something
 vanilla references.

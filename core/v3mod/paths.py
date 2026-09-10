@@ -1,7 +1,11 @@
-"""Locate Victoria 3 directories and the project config.
+"""Locate Victoria 3 directories, the workspace, and the per-mod project config.
 
 Detection is best-effort; every path can be overridden by environment
-variables (V3MOD_GAME_DIR, V3MOD_USER_DIR) or by the project's v3mod.toml.
+variables (V3MOD_GAME_DIR, V3MOD_USER_DIR) or by config.
+
+Two config files:
+  v3mod-workspace.toml   marks the monorepo root; shared defaults and tool paths
+  v3mod.toml             marks one mod, at <workspace>/mods/<dir>/v3mod.toml
 """
 
 from __future__ import annotations
@@ -15,6 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 CONFIG_NAME = "v3mod.toml"
+WORKSPACE_NAME = "v3mod-workspace.toml"
+DEFAULT_MODS_DIR = "mods"
 STEAM_APP_ID = 529340
 
 
@@ -178,7 +184,90 @@ def find_tiger(configured: str | None = None) -> str | None:
 
 
 @dataclass
+class Workspace:
+    """The monorepo root: shared config plus a mods/ directory of mod projects."""
+
+    root: Path
+    name: str = ""
+    mods_dirname: str = DEFAULT_MODS_DIR
+    defaults: dict = field(default_factory=dict)
+    tiger: str | None = None
+    game: str | None = None
+
+    @property
+    def mods_dir(self) -> Path:
+        return self.root / self.mods_dirname
+
+    @property
+    def config_file(self) -> Path:
+        return self.root / WORKSPACE_NAME
+
+    def mod_dirs(self) -> list[Path]:
+        """Directories under mods/ that hold a v3mod.toml, sorted by name."""
+        if not self.mods_dir.is_dir():
+            return []
+        return sorted((d for d in self.mods_dir.iterdir()
+                       if d.is_dir() and (d / CONFIG_NAME).exists()),
+                      key=lambda d: d.name.lower())
+
+    def mods(self) -> list["Project"]:
+        return [load_project(d / CONFIG_NAME, workspace=self) for d in self.mod_dirs()]
+
+    def mod(self, selector: str) -> "Project | None":
+        """Find one mod by directory name (exact, then case-insensitive) or by [mod].name."""
+        direct = self.mods_dir / selector
+        if (direct / CONFIG_NAME).exists():
+            return load_project(direct / CONFIG_NAME, workspace=self)
+        low = selector.lower()
+        loaded = self.mods()
+        for proj in loaded:
+            if proj.root.name.lower() == low:
+                return proj
+        for proj in loaded:
+            if proj.name.lower() == low:
+                return proj
+        return None
+
+
+def find_workspace(start: Path | None = None) -> Workspace | None:
+    """Walk up from `start` until a v3mod-workspace.toml is found."""
+    cur = (start or Path.cwd()).resolve()
+    for candidate in (cur, *cur.parents):
+        cfg = candidate / WORKSPACE_NAME
+        if cfg.exists():
+            return load_workspace(cfg)
+    return None
+
+
+def load_workspace(cfg_path: Path) -> Workspace:
+    data = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+    ws = data.get("workspace", {})
+    tools = data.get("tools", {})
+    root = cfg_path.parent
+    return Workspace(
+        root=root,
+        name=ws.get("name", root.name),
+        mods_dirname=ws.get("mods_dir", DEFAULT_MODS_DIR),
+        defaults=data.get("defaults", {}),
+        tiger=tools.get("tiger") or None,
+        game=tools.get("game") or None,
+    )
+
+
+def require_workspace(start: Path | None = None) -> Workspace:
+    ws = find_workspace(start)
+    if ws is None:
+        raise SystemExit(
+            f"error: no {WORKSPACE_NAME} in this directory or its parents. "
+            "Run `v3mod new <dir>` once to create a workspace, then `v3mod add` for each mod."
+        )
+    return ws
+
+
+@dataclass
 class Project:
+    """One mod inside a workspace: <workspace>/mods/<dir>/."""
+
     root: Path
     mod_dir: Path
     name: str = ""
@@ -186,6 +275,7 @@ class Project:
     mod_id: str = ""
     tiger: str | None = None
     game: str | None = None
+    workspace: Workspace | None = None
     baseline_dir: Path = field(init=False)
     tiger_baseline: Path = field(init=False)
     overrides_file: Path = field(init=False)
@@ -195,6 +285,10 @@ class Project:
         self.baseline_dir = fw / "baseline"
         self.tiger_baseline = fw / "tiger-baseline.json"
         self.overrides_file = fw / "overrides.txt"
+
+    @property
+    def label(self) -> str:
+        return self.name or self.root.name
 
 
 def find_project(start: Path | None = None) -> Project | None:
@@ -207,11 +301,12 @@ def find_project(start: Path | None = None) -> Project | None:
     return None
 
 
-def load_project(cfg_path: Path) -> Project:
+def load_project(cfg_path: Path, workspace: Workspace | None = None) -> Project:
     data = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
     mod = data.get("mod", {})
     tools = data.get("tools", {})
     root = cfg_path.parent
+    ws = workspace if workspace is not None else find_workspace(root)
     mod_dir = root / mod.get("dir", "mod")
     return Project(
         root=root,
@@ -219,8 +314,9 @@ def load_project(cfg_path: Path) -> Project:
         name=mod.get("name", ""),
         prefix=mod.get("prefix", ""),
         mod_id=mod.get("id", ""),
-        tiger=tools.get("tiger") or None,
-        game=tools.get("game") or None,
+        # A mod may override the workspace's tool paths; usually it doesn't.
+        tiger=tools.get("tiger") or (ws.tiger if ws else None),
+        game=tools.get("game") or (ws.game if ws else None),
     )
 
 
@@ -233,11 +329,58 @@ def mod_file_manifest(mod_dir: Path) -> set[str]:
     return out
 
 
-def require_project() -> Project:
+def _ambiguous(ws: Workspace, mods: list[Project]) -> SystemExit:
+    listing = "\n".join(f"  {m.root.name:<24} {m.label}" for m in mods)
+    return SystemExit(
+        f"error: {len(mods)} mods in the workspace at {ws.root}; say which one with "
+        f"`--mod NAME`, or cd into its directory:\n{listing}"
+    )
+
+
+def resolve_project(args=None, required: bool = False) -> Project | None:
+    """Find the mod a command should act on.
+
+    Order: an explicit --mod, then a v3mod.toml at or above the working directory,
+    then the workspace's only mod. With several mods and no selection, `required`
+    decides between an error and None.
+    """
+    selector = getattr(args, "mod", None)
+    if selector:
+        ws = require_workspace()
+        proj = ws.mod(selector)
+        if proj is None:
+            known = ", ".join(d.name for d in ws.mod_dirs()) or "(none)"
+            raise SystemExit(f"error: no mod {selector!r} in {ws.mods_dir} (have: {known})")
+        return proj
+
     proj = find_project()
-    if proj is None:
+    if proj is not None:
+        return proj
+
+    ws = find_workspace()
+    if ws is not None:
+        mods = ws.mods()
+        if len(mods) == 1:
+            return mods[0]
+        if not mods:
+            if required:
+                raise SystemExit(
+                    f"error: the workspace at {ws.root} has no mods yet. Run `v3mod add` to create one."
+                )
+            return None
+        if required:
+            raise _ambiguous(ws, mods)
+        return None
+
+    if required:
         raise SystemExit(
-            f"error: no {CONFIG_NAME} found in this directory or its parents. "
-            "Run `v3mod new` to create a project, or cd into one."
+            f"error: no {CONFIG_NAME} or {WORKSPACE_NAME} in this directory or its parents. "
+            "Run `v3mod new <dir>` to create a workspace, or cd into an existing one."
         )
+    return None
+
+
+def require_project(args=None) -> Project:
+    proj = resolve_project(args, required=True)
+    assert proj is not None  # required=True either returns a project or raises
     return proj

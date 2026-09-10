@@ -61,17 +61,40 @@ def unlink_mod(link_name: str) -> Path:
     return target
 
 
+def _selected(args) -> list[paths.Project]:
+    if getattr(args, "all", False):
+        if args.name:
+            raise SystemExit("error: --name works on one mod; drop it when using --all")
+        mods = paths.require_workspace().mods()
+        if not mods:
+            raise SystemExit("error: the workspace has no mods yet; run `v3mod add`")
+        return mods
+    return [paths.require_project(args)]
+
+
 def cmd_link(args) -> int:
-    proj = paths.require_project()
-    name = args.name or proj.root.name
-    target = link_mod(proj.mod_dir, name)
-    print(f"linked {target} -> {proj.mod_dir}")
-    return 0
+    failed = 0
+    for proj in _selected(args):
+        name = args.name or proj.root.name
+        try:
+            target = link_mod(proj.mod_dir, name)
+        except (FileExistsError, OSError) as e:
+            print(f"! {proj.root.name}: {e}")
+            failed += 1
+            continue
+        print(f"linked {target} -> {proj.mod_dir}")
+    return 1 if failed else 0
 
 
 def cmd_unlink(args) -> int:
-    proj = paths.require_project()
-    name = args.name or proj.root.name
-    target = unlink_mod(name)
-    print(f"removed {target}")
-    return 0
+    failed = 0
+    for proj in _selected(args):
+        name = args.name or proj.root.name
+        try:
+            target = unlink_mod(name)
+        except (FileNotFoundError, IsADirectoryError, OSError) as e:
+            print(f"! {proj.root.name}: {e}")
+            failed += 1
+            continue
+        print(f"removed {target}")
+    return 1 if failed else 0

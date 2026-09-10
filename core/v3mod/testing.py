@@ -38,7 +38,7 @@ def probe_flags(binary: Path) -> dict[str, bool]:
 
 
 def cmd_flags(args) -> int:
-    proj = paths.find_project()
+    proj = paths.resolve_project(args)
     game = Path(proj.game).expanduser() if (proj and proj.game) else paths.game_dir()
     binary = paths.game_binary(game)
     if binary is None:
@@ -100,7 +100,7 @@ def _parse_results(text: str) -> list[tuple[str, str, str]]:
 
 
 def cmd_test(args) -> int:
-    proj = paths.find_project()
+    proj = paths.require_project(args)
     game = Path(proj.game).expanduser() if (proj and proj.game) else paths.game_dir()
     binary = paths.game_binary(game)
     if binary is None:
@@ -118,7 +118,8 @@ def cmd_test(args) -> int:
 
     # Launch via the shared launcher so runtime/env handling is identical.
     class A:
-        steam = False; direct = True; xvfb = args.xvfb; runtime = args.runtime
+        steam = False; direct = True; runtime = args.runtime
+        mod = args.mod
         tests = False; no_save_after_failed_test = False
         flag = ["-nographics", "-handsoff", "-scripted_tests"]
         wait = False; dry_run = args.dry_run

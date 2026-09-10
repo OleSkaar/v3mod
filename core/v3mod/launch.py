@@ -7,7 +7,6 @@ launch:
   v3mod launch --steam              steam -applaunch 529340 <flags> instead (launcher + shader step unless
                                     the Steam launch option in the README is set)
   v3mod launch --tests              add -run_tests
-  v3mod launch --xvfb               wrap a direct launch in xvfb-run (experiment; see doc §4)
   v3mod launch --wait               block until the process exits, then report where test results land
 
 playset:
@@ -28,7 +27,6 @@ from pathlib import Path
 from . import paths
 
 DEFAULT_FLAGS = ["-debug_mode"]
-XVFB_SCREEN = "-screen 0 1280x720x24"
 
 
 def _flags(proj: paths.Project | None, args) -> list[str]:
@@ -59,15 +57,13 @@ def start_process(args) -> subprocess.Popen | None:
 
     Returns the Popen, or None on --dry-run. Sets args._direct / args._flags / args._game for callers.
     """
-    proj = paths.find_project()
+    proj = paths.resolve_project(args)
     game = Path(proj.game).expanduser() if (proj and proj.game) else paths.game_dir()
     flags = _flags(proj, args)
 
     binary = paths.game_binary(game)
     direct = not args.steam
     if direct and binary is None:
-        if args.xvfb:
-            raise SystemExit("error: game binary not found; set V3MOD_GAME_DIR or [tools].game")
         print("game binary not found; falling back to steam -applaunch (set V3MOD_GAME_DIR for direct launch)")
         direct = False
 
@@ -90,14 +86,6 @@ def start_process(args) -> subprocess.Popen | None:
                 name, run = slr
                 cmd = [str(run), "--", *cmd]
                 runtime_note = f", inside Steam Linux Runtime '{name}'"
-        if args.xvfb:
-            xvfb = shutil.which("xvfb-run")
-            if xvfb is None:
-                raise SystemExit("error: xvfb-run not found (Fedora/Bazzite: rpm-ostree install xorg-x11-server-Xvfb; Debian: apt install xvfb)")
-            cmd = [xvfb, "-a", "-s", XVFB_SCREEN, *cmd]
-            # Under a Wayland session SDL would otherwise ignore the virtual X display.
-            env["SDL_VIDEODRIVER"] = "x11"
-            env.pop("WAYLAND_DISPLAY", None)
         note = "direct (no launcher, no Steam shader pre-processing; Steam client must be running)" + runtime_note
     else:
         steam = paths.steam_binary()

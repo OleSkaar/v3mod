@@ -1,12 +1,12 @@
 # v3mod-modding skill
 
 An [Agent Skill](https://code.claude.com/docs/en/skills) that teaches Claude how to build and test
-Victoria 3 mods in a repo managed by the `v3mod` CLI.
+Victoria 3 mods in a workspace managed by the `v3mod` CLI.
 
 ## Install
 
 Skills are discovered from `~/.claude/skills/` (all projects) or `.claude/skills/` (one project).
-Install it globally so nothing agent-related has to live inside a mod repo:
+Install it globally so nothing agent-related has to live inside a mod workspace:
 
 ```bash
 mkdir -p ~/.claude/skills
@@ -19,13 +19,16 @@ Restart Claude Code, then confirm with `/skills`.
 
 An earlier version wrote `CLAUDE.md` and `AGENTS.md` into each mod repo, with machine paths pinned
 in a table. That produced warnings about importing from outside the working directory and put
-machine-specific state under version control. The skill instead:
+machine-specific state under version control. Installing it into the mod workspace has the same
+problem one level up: the skill would be versioned per workspace and drift from the CLI it drives.
+It instead:
 
-- lives outside every mod repo,
+- lives outside every mod workspace, installed once for all projects,
 - discovers paths at run time by calling `v3mod paths`,
 - loads its reference files only when the task needs them (progressive disclosure).
 
-A mod repo therefore contains only mod content plus `v3mod.toml` and `framework/`.
+A mod workspace therefore contains only mod content plus `v3mod-workspace.toml`, each mod's
+`v3mod.toml`, and `framework/`.
 
 ## Layout
 

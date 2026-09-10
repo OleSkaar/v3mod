@@ -22,6 +22,41 @@ def _not_implemented(name: str, doc_section: str):
     return _cmd
 
 
+def _mod_options(p: argparse.ArgumentParser) -> None:
+    """Scaffolding flags shared by `new` and `add`.
+
+    On `new`, --author and --game-version answer the workspace-level questions and become the
+    defaults every later `v3mod add` inherits; on `add` they override those defaults for one mod.
+    """
+    p.add_argument("-y", "--yes", action="store_true", help="accept defaults / skip prompts")
+    p.add_argument("--name")
+    p.add_argument("--dir", help="directory name under mods/ (ASCII only)")
+    p.add_argument("--author")
+    p.add_argument("--id", help="mod id, reverse-domain style")
+    p.add_argument("--version", dest="version")
+    p.add_argument("--game-version", dest="game_version")
+    p.add_argument("--description")
+    p.add_argument("--tags", type=lambda s: [t.strip() for t in s.split(",") if t.strip()])
+    p.add_argument("--prefix", help="script prefix, e.g. mymod")
+    mp = p.add_mutually_exclusive_group()
+    mp.add_argument("--multiplayer", dest="multiplayer", action="store_true", default=None)
+    mp.add_argument("--no-multiplayer", dest="multiplayer", action="store_false")
+    cmf = p.add_mutually_exclusive_group()
+    cmf.add_argument("--cmf", dest="cmf", action="store_true", default=None,
+                     help="declare a dependency on Community Mod Framework")
+    cmf.add_argument("--no-cmf", dest="cmf", action="store_false")
+    lk = p.add_mutually_exclusive_group()
+    lk.add_argument("--link", dest="link", action="store_true", default=None)
+    lk.add_argument("--no-link", dest="link", action="store_false")
+
+
+def _mod_selector(p: argparse.ArgumentParser) -> None:
+    """`--mod NAME` for commands that act on one mod in the workspace."""
+    p.add_argument("-m", "--mod", metavar="NAME",
+                   help="mod to act on (directory name under mods/). Default: the mod containing "
+                        "the working directory, or the workspace's only mod.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="v3mod",
@@ -31,33 +66,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"v3mod {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
-    # new -------------------------------------------------------------------
-    n = sub.add_parser("new", help="create a new mod project (interactive)")
-    n.add_argument("path", nargs="?", help="parent directory (default: cwd)")
-    n.add_argument("-y", "--yes", action="store_true", help="accept defaults / skip prompts")
-    n.add_argument("--name")
-    n.add_argument("--dir", help="directory name (ASCII only)")
-    n.add_argument("--author")
-    n.add_argument("--id", help="mod id, reverse-domain style")
-    n.add_argument("--version", dest="version")
-    n.add_argument("--game-version", dest="game_version")
-    n.add_argument("--description")
-    n.add_argument("--tags", type=lambda s: [t.strip() for t in s.split(",") if t.strip()])
-    n.add_argument("--prefix", help="script prefix, e.g. mymod")
-    mp = n.add_mutually_exclusive_group()
-    mp.add_argument("--multiplayer", dest="multiplayer", action="store_true", default=None)
-    mp.add_argument("--no-multiplayer", dest="multiplayer", action="store_false")
-    cmf = n.add_mutually_exclusive_group()
-    cmf.add_argument("--cmf", dest="cmf", action="store_true", default=None,
-                     help="declare a dependency on Community Mod Framework")
-    cmf.add_argument("--no-cmf", dest="cmf", action="store_false")
+    # new / add / mods ------------------------------------------------------
+    n = sub.add_parser("new", help="create a workspace (monorepo) and its first mod")
+    n.add_argument("path", nargs="?", help="workspace directory, created if missing (default: cwd)")
+    n.add_argument("--empty", action="store_true", help="create the workspace only, no first mod")
+    n.add_argument("--workspace-name", dest="workspace_name", help="display name (default: directory name)")
+    n.add_argument("--id-prefix", dest="id_prefix", help="shared mod-id prefix, e.g. com.github.me")
     g = n.add_mutually_exclusive_group()
     g.add_argument("--git", dest="git", action="store_true", default=None)
     g.add_argument("--no-git", dest="git", action="store_false")
-    lk = n.add_mutually_exclusive_group()
-    lk.add_argument("--link", dest="link", action="store_true", default=None)
-    lk.add_argument("--no-link", dest="link", action="store_false")
+    _mod_options(n)
     n.set_defaults(func=scaffold.cmd_new)
+
+    a = sub.add_parser("add", help="add another mod to an existing workspace")
+    a.add_argument("mod_name", nargs="?", metavar="NAME", help="mod name (same as --name)")
+    a.add_argument("--workspace", metavar="PATH", help="workspace to add to (default: found from cwd)")
+    _mod_options(a)
+    a.set_defaults(func=scaffold.cmd_add)
+
+    sub.add_parser("mods", help="list the mods in this workspace").set_defaults(func=scaffold.cmd_mods)
 
     # lint ------------------------------------------------------------------
     l = sub.add_parser("lint", help="run vic3-tiger on the mod")
@@ -72,28 +99,37 @@ def build_parser() -> argparse.ArgumentParser:
     l.add_argument("--unused", action="store_true")
     l.add_argument("--no-color", action="store_true")
     l.add_argument("--game", help="path to game install (overrides config)")
+    l.add_argument("--all", action="store_true", help="lint every mod in the workspace")
+    _mod_selector(l)
     l.set_defaults(func=lint.cmd_lint)
 
     # link / unlink ---------------------------------------------------------
     lnk = sub.add_parser("link", help="symlink mod/ into the game's mod folder")
-    lnk.add_argument("--name", help="link name (default: project directory name)")
+    lnk.add_argument("--name", help="link name (default: the mod's directory name)")
+    lnk.add_argument("--all", action="store_true", help="link every mod in the workspace")
+    _mod_selector(lnk)
     lnk.set_defaults(func=linking.cmd_link)
     ulk = sub.add_parser("unlink", help="remove the symlink")
     ulk.add_argument("--name")
+    ulk.add_argument("--all", action="store_true", help="unlink every mod in the workspace")
+    _mod_selector(ulk)
     ulk.set_defaults(func=linking.cmd_unlink)
 
     # checks ----------------------------------------------------------------
     co = sub.add_parser("check-overrides", help="fail on undeclared full-file overrides of vanilla")
     co.add_argument("--game")
+    co.add_argument("--all", action="store_true", help="check every mod in the workspace")
+    _mod_selector(co)
     co.set_defaults(func=checks.cmd_check_overrides)
     sub.add_parser("paths", help="show detected directories").set_defaults(func=checks.cmd_paths)
-    sub.add_parser("doctor", help="check toolchain and project health").set_defaults(func=checks.cmd_doctor)
+    doc = sub.add_parser("doctor", help="check toolchain and workspace health")
+    _mod_selector(doc)
+    doc.set_defaults(func=checks.cmd_doctor)
 
     # launch / playset ------------------------------------------------------
     la = sub.add_parser("launch", help="launch the game directly (no launcher); --steam to go via Steam")
     la.add_argument("--steam", action="store_true", help="launch via `steam -applaunch` instead of the binary")
     la.add_argument("--direct", action="store_true", help=argparse.SUPPRESS)  # kept for compatibility; now default
-    la.add_argument("--xvfb", action="store_true", help="wrap a direct launch in xvfb-run (experimental)")
     la.add_argument("--runtime", choices=["auto", "sniper", "soldier", "none"], default="auto",
                     help="run inside a Steam Linux Runtime container (default auto: sniper, then soldier; none = host libs)")
     la.add_argument("--tests", action="store_true", help="add -run_tests")
@@ -101,6 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
     la.add_argument("--flag", action="append", metavar="FLAG", help="extra launch flag (repeatable)")
     la.add_argument("--wait", action="store_true", help="block until the process exits")
     la.add_argument("--dry-run", action="store_true", help="print the command only")
+    _mod_selector(la)
     la.set_defaults(func=launch.cmd_launch)
 
     ps = sub.add_parser("playset", help="inspect/edit the launcher's dlc_load.json (Linux)")
@@ -119,13 +156,12 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--no-save-after-failed-test", action="store_true", help="skip the TEST_FAIL_* save on failure")
     t.add_argument("--continue-last-save", action="store_true", help="add -continuelastsave")
     t.add_argument("--seed", type=int, help="add -random_seed=N")
-    t.add_argument("--xvfb", action="store_true",
-                   help="also wrap in xvfb-run (only if -nographics alone still needs a display)")
     t.add_argument("--runtime", choices=["auto", "sniper", "soldier", "none"], default="auto")
     t.add_argument("--flag", action="append", metavar="FLAG", help="extra launch flag (repeatable)")
     t.add_argument("--poll", type=int, default=15, help="seconds between checks of tests.txt (default 15)")
     t.add_argument("--timeout", type=int, default=180, help="minutes to wait for results (default 180)")
     t.add_argument("--dry-run", action="store_true")
+    _mod_selector(t)
     t.set_defaults(func=testing.cmd_test)
 
     fl = sub.add_parser("flags", help="probe the game binary for known engine launch flags")

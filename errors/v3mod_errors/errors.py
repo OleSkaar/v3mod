@@ -51,7 +51,7 @@ def _mentions_mod(line: str, manifest: set[str], mod_dir_name: str) -> bool:
 
 
 def cmd_errors(args) -> int:
-    proj = paths.find_project()
+    proj = paths.resolve_project(args)
     if args.conflicts:
         log_path = paths.logs_dir() / "database_conflicts.log"
     else:
@@ -64,13 +64,13 @@ def cmd_errors(args) -> int:
 
     if args.mine:
         if proj is None:
-            raise SystemExit("error: --mine needs a v3mod project (v3mod.toml)")
+            raise SystemExit("error: --mine needs one mod; run it inside mods/<dir>/ or pass --mod NAME")
         manifest = paths.mod_file_manifest(proj.mod_dir)
         lines = [l for l in lines if _mentions_mod(l, manifest, proj.root.name)]
 
     if args.baseline:
         if proj is None:
-            raise SystemExit("error: --baseline needs a v3mod project (v3mod.toml)")
+            raise SystemExit("error: --baseline needs one mod; run it inside mods/<dir>/ or pass --mod NAME")
         proj.baseline_dir.mkdir(parents=True, exist_ok=True)
         dest = proj.baseline_dir / f"{args.baseline}.txt"
         uniq = sorted({normalise(l) for l in lines if l.strip()})
@@ -80,7 +80,7 @@ def cmd_errors(args) -> int:
 
     if args.diff:
         if proj is None:
-            raise SystemExit("error: --diff needs a v3mod project (v3mod.toml)")
+            raise SystemExit("error: --diff needs one mod; run it inside mods/<dir>/ or pass --mod NAME")
         src = proj.baseline_dir / f"{args.diff}.txt"
         if not src.exists():
             raise SystemExit(f"error: baseline {src} not found (create with --baseline {args.diff})")

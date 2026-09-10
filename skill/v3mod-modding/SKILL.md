@@ -1,12 +1,13 @@
 ---
 name: v3mod-modding
 description: >-
-  Build and test Victoria 3 mods in a repo managed by the v3mod CLI. Use when the user asks to add
-  or change Victoria 3 content (buildings, laws, journal entries, decisions, events, AI strategies,
-  production methods, localization), when a directory contains v3mod.toml or a mod/.metadata/
-  metadata.json, or when they ask to lint, launch, or run scripted tests for a Vic3 mod. Covers where
-  each kind of change belongs, INJECT/REPLACE override rules, verifying identifiers against the
-  game's own docs, and the v3mod commands for linting and headless testing.
+  Build and test Victoria 3 mods in a workspace managed by the v3mod CLI. Use when the user asks to
+  add or change Victoria 3 content (buildings, laws, journal entries, decisions, events, AI
+  strategies, production methods, localization), when a directory contains v3mod-workspace.toml,
+  v3mod.toml or a mod/.metadata/metadata.json, or when they ask to lint, launch, or run scripted
+  tests for a Vic3 mod. Covers picking the right mod in a multi-mod workspace, where each kind of
+  change belongs, INJECT/REPLACE override rules, verifying identifiers against the game's own docs,
+  and the v3mod commands for linting and headless testing.
 ---
 
 # Victoria 3 modding with v3mod
@@ -22,9 +23,17 @@ Three rules that prevent most wasted work:
 
 ## Orient first
 
-Run `v3mod paths` to get the resolved game directory, user-data directory, logs, and mod root for
-this machine. Do not hardcode paths. If it reports no project, the working directory is not a v3mod
-mod repo — ask before creating one with `v3mod new`.
+Run `v3mod paths` to get the resolved game directory, user-data directory, logs, and the workspace
+and mod for this machine. Do not hardcode paths.
+
+Mods live together in one **workspace**: `v3mod-workspace.toml` at the root, one mod per
+`mods/<dir>/`, each with its own `mod/` (what the game loads) and `framework/` (tooling state).
+
+- `v3mod paths` reports no workspace → nothing is set up here. Ask before running `v3mod new <dir>`.
+- It reports a workspace but no selected mod → several mods and none chosen. Run `v3mod mods`, then
+  either `cd mods/<dir>` or pass `--mod <dir>` to every command. Ask which one if it isn't obvious;
+  never guess when a change could land in the wrong mod.
+- A new mod goes in with `v3mod add "<name>"` — never by hand, and never a second workspace.
 
 Key locations it reports:
 
@@ -70,14 +79,20 @@ Load `references/testing.md` before writing a scripted test. Short version: test
 ## Commands
 
 ```
-v3mod paths                  resolved directories on this machine
+v3mod paths                  resolved directories, workspace and selected mod
+v3mod mods                   every mod in the workspace, and what is linked
+v3mod add "<name>"           scaffold another mod in the workspace
 v3mod lint --ci              Tiger; exit 1 on new warning+ (baseline-suppressed)
+v3mod lint --ci --all        the same for every mod in the workspace
 v3mod check-overrides        fails on undeclared full-file overrides of vanilla
 v3mod test                   headless scripted-test run, prints OK/FAIL table
 v3mod launch                 straight into the game, debug mode, no launcher
 v3mod-errors --mine          error.log lines referencing this mod   (optional add-on)
 v3mod-errors --conflicts     which file won each override            (optional add-on)
 ```
+
+Every command above acts on the mod containing the working directory. From the workspace root, add
+`--mod <dir>`; `lint`, `check-overrides`, `link` and `unlink` also take `--all`.
 
 Run `v3mod lint --ci` after every batch of edits. Never tell the user a change works before it has
 passed lint; never claim a behavioural change works before a test or a run has shown it.
@@ -86,7 +101,8 @@ passed lint; never claim a behavioural change works before a test or a run has s
 
 1. Identifiers verified against the dumps or vanilla, not memory.
 2. Right folder, right naming class, right override mechanism (`references/placement.md`).
-3. Localization for every new key; BOM on every file.
+3. Localization for every new key; BOM on every file. Keys and global variables carry the mod's
+   own script prefix, so sibling mods in the workspace never collide.
 4. `v3mod lint --ci` and `v3mod check-overrides` pass.
 5. A scripted test exists where the behaviour is testable.
 6. After a run, read the error log yourself: `v3mod-errors --mine` if that add-on is installed,

@@ -1,4 +1,14 @@
-"""`v3mod new` — scaffold a new mod repository."""
+"""`v3mod new` (create the workspace), `v3mod add` (a mod inside it), `v3mod mods`.
+
+Layout produced:
+
+    <workspace>/
+      v3mod-workspace.toml     shared defaults and tool paths; marks the root
+      README.md  .gitignore    one git repository for every mod
+      mods/<dir>/v3mod.toml    one mod
+      mods/<dir>/mod/          the part the game sees (symlinked into the mod folder)
+      mods/<dir>/framework/    tooling state: baselines, declared overrides, test output
+"""
 
 from __future__ import annotations
 
@@ -56,9 +66,36 @@ def _v_dir_name(v: str) -> str | None:
     return None
 
 
+def _taken(kind: str, values: dict[str, str]):
+    """Validator rejecting a value already used by another mod in the workspace."""
+    def check(v: str) -> str | None:
+        owner = values.get(v.lower())
+        return f"{kind} already used by mods/{owner}" if owner else None
+    return check
+
+
+def _both(*validators):
+    def check(v: str) -> str | None:
+        for fn in validators:
+            problem = fn(v)
+            if problem:
+                return problem
+        return None
+    return check
+
+
 # --------------------------------------------------------------------------- #
 # answers
 # --------------------------------------------------------------------------- #
+
+@dataclass
+class WorkspaceAnswers:
+    name: str
+    author: str
+    id_prefix: str
+    game_version: str
+    git_init: bool
+
 
 @dataclass
 class Answers:
@@ -73,45 +110,77 @@ class Answers:
     prefix: str
     multiplayer: bool
     depend_cmf: bool
-    git_init: bool
     link: bool
 
 
-def collect_answers(args) -> Answers:
+def collect_workspace_answers(args, root: Path) -> WorkspaceAnswers:
+    """Questions asked once for the whole monorepo; `v3mod add` inherits the answers."""
     ni = bool(args.yes)
+    name = ask("Workspace name", default=root.name, preset=getattr(args, "workspace_name", None),
+               validate=_v_nonempty, non_interactive=ni)
+    author = ask("Author / GitHub handle (shared by every mod)", default="me", preset=args.author,
+                 validate=_v_nonempty, non_interactive=ni)
+    id_prefix = ask("Mod id prefix (each mod's id becomes <prefix>.<slug>)",
+                    default=f"com.github.{_slug(author)}", preset=getattr(args, "id_prefix", None),
+                    validate=_v_mod_id, non_interactive=ni)
+    game_version = ask("Supported game version ('*' wildcard, '+' = or higher)",
+                       default=DEFAULT_GAME_VERSION, preset=args.game_version,
+                       validate=_v_nonempty, non_interactive=ni)
+    git_init = ask_bool("Initialise a git repository for the workspace?", default=True,
+                        preset=None if args.git is None else args.git, non_interactive=ni)
+    return WorkspaceAnswers(name, author, id_prefix, game_version, git_init)
+
+
+def collect_mod_answers(args, defaults: dict, siblings: list[paths.Project]) -> Answers:
+    """Questions asked per mod. `defaults` comes from the workspace's [defaults] table."""
+    ni = bool(args.yes)
+    dirs = {p.root.name.lower(): p.root.name for p in siblings}
+    ids = {p.mod_id.lower(): p.root.name for p in siblings if p.mod_id}
+    prefixes = {p.prefix.lower(): p.root.name for p in siblings if p.prefix}
+
+    author = args.author or defaults.get("author", "me")
+    id_prefix = defaults.get("id_prefix") or f"com.github.{_slug(author)}"
 
     name = ask("Mod name", default="My Mod", preset=args.name,
                validate=_v_nonempty, non_interactive=ni)
     slug = _slug(name)
-    dir_name = ask("Directory name", default=slug, preset=args.dir,
-                   validate=_v_dir_name, non_interactive=ni)
-    author = ask("Author / GitHub handle", default="me", preset=args.author,
-                 validate=_v_nonempty, non_interactive=ni)
+    dir_name = ask("Directory name (under mods/)", default=_free(slug, dirs), preset=args.dir,
+                   validate=_both(_v_dir_name, _taken("directory", dirs)), non_interactive=ni)
     mod_id = ask("Mod id (reverse-domain, never change it later)",
-                 default=f"com.github.{_slug(author)}.{slug}", preset=args.id,
-                 validate=_v_mod_id, non_interactive=ni)
+                 default=f"{id_prefix}.{slug}", preset=args.id,
+                 validate=_both(_v_mod_id, _taken("mod id", ids)), non_interactive=ni)
     version = ask("Mod version", default="1.0.0", preset=args.version,
                   validate=_v_version, non_interactive=ni)
-    game_version = ask("Supported game version ('*' wildcard, '+' = or higher)",
-                       default=DEFAULT_GAME_VERSION, preset=args.game_version,
-                       validate=_v_nonempty, non_interactive=ni)
+    game_version = ask("Supported game version", default=defaults.get("game_version", DEFAULT_GAME_VERSION),
+                       preset=args.game_version, validate=_v_nonempty, non_interactive=ni)
     description = ask("Short description", default=f"{name} for Victoria 3",
                       preset=args.description, non_interactive=ni)
     tags = ask_list("Tags (max 5)", default=[], preset=args.tags, max_items=5,
                     non_interactive=ni)
     prefix = ask("Script prefix (used in file names, variables, loc keys)",
-                 default=_short_prefix(slug), preset=args.prefix,
-                 validate=_v_prefix, non_interactive=ni)
-    multiplayer = ask_bool("Multiplayer synchronized?", default=True,
+                 default=_free(_short_prefix(slug), prefixes), preset=args.prefix,
+                 validate=_both(_v_prefix, _taken("script prefix", prefixes)), non_interactive=ni)
+    multiplayer = ask_bool("Multiplayer synchronized?", default=bool(defaults.get("multiplayer", True)),
                            preset=args.multiplayer, non_interactive=ni)
-    depend_cmf = ask_bool("Depend on Community Mod Framework (CMF)?", default=False,
+    depend_cmf = ask_bool("Depend on Community Mod Framework (CMF)?",
+                          default=bool(defaults.get("cmf", False)),
                           preset=args.cmf, non_interactive=ni)
-    git_init = ask_bool("Initialise a git repository?", default=True,
-                        preset=None if args.git is None else args.git, non_interactive=ni)
-    link = ask_bool("Link the mod into the game's mod folder now?", default=True,
+    link = ask_bool("Link the mod into the game's mod folder now?",
+                    default=bool(defaults.get("link", True)),
                     preset=None if args.link is None else args.link, non_interactive=ni)
     return Answers(name, dir_name, author, mod_id, version, game_version,
-                   description, tags, prefix, multiplayer, depend_cmf, git_init, link)
+                   description, tags, prefix, multiplayer, depend_cmf, link)
+
+
+def _free(candidate: str, taken: dict[str, str]) -> str:
+    """Suffix a default with _2, _3 … so it doesn't collide with a sibling mod."""
+    if candidate.lower() not in taken:
+        return candidate
+    for n in range(2, 100):
+        alt = f"{candidate}_{n}"
+        if alt.lower() not in taken:
+            return alt
+    return candidate
 
 
 def _short_prefix(slug: str) -> str:
@@ -129,7 +198,95 @@ def _short_prefix(slug: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# file templates
+# workspace templates
+# --------------------------------------------------------------------------- #
+
+def _toml_bool(v: bool) -> str:
+    return "true" if v else "false"
+
+
+def workspace_toml(w: WorkspaceAnswers, defaults: dict) -> str:
+    return f'''# v3mod workspace — the monorepo root. `v3mod add` creates a new mod under mods/.
+[workspace]
+name = "{w.name}"
+mods_dir = "{paths.DEFAULT_MODS_DIR}"
+
+[defaults]
+# Pre-filled answers for `v3mod add`, so a second mod needs almost no setup.
+author = "{w.author}"
+id_prefix = "{w.id_prefix}"     # each mod's id becomes <id_prefix>.<slug>
+game_version = "{w.game_version}"
+multiplayer = {_toml_bool(bool(defaults.get("multiplayer", True)))}
+cmf = {_toml_bool(bool(defaults.get("cmf", False)))}
+link = {_toml_bool(bool(defaults.get("link", True)))}
+
+[tools]
+# Shared by every mod in the workspace; a mod may override them in its own v3mod.toml.
+# Path to the vic3-tiger executable. Leave empty to search PATH.
+tiger = ""
+# Path to the Victoria 3 install (folder containing game/ and binaries/). Leave empty to autodetect.
+game = ""
+'''
+
+
+def workspace_gitignore() -> str:
+    return '''# v3mod
+mods/*/framework/baseline/*.log
+mods/*/framework/run/
+mods/*/framework/test-output/
+*.log
+.DS_Store
+Thumbs.db
+__pycache__/
+'''
+
+
+def workspace_readme(w: WorkspaceAnswers) -> str:
+    return f'''# {w.name}
+
+Victoria 3 mods by {w.author}, in one repository managed by the
+[`v3mod`](https://github.com/{w.author}) CLI.
+
+## Layout
+
+```
+v3mod-workspace.toml   shared defaults (author, id prefix, game version) and tool paths
+mods/<dir>/            one mod
+mods/<dir>/mod/        the part the game sees — symlinked into the game's mod folder
+mods/<dir>/framework/  tooling state: Tiger baseline, error-log baselines, declared overrides
+```
+
+## Working here
+
+```bash
+v3mod mods                 # every mod in this workspace, and whether it is linked
+v3mod add                  # scaffold another mod (inherits the defaults above)
+```
+
+Every mod command takes `--mod <dir>` when run from the workspace root, or acts on the current
+mod when run from inside `mods/<dir>/`:
+
+```bash
+v3mod lint --mod <dir>     # Tiger
+v3mod lint --ci --all      # every mod; non-zero exit on new findings
+v3mod test --mod <dir>     # headless scripted tests
+v3mod link --mod <dir>     # symlink into the game's mod folder
+v3mod paths                # resolved directories on this machine
+```
+
+## Conventions
+
+- Every change lives in its own file. Use `INJECT:` / `REPLACE:` keywords in keyword-supported
+  folders rather than copying a whole vanilla file.
+- Events and GUI types are first-wins: name override files so they sort before vanilla.
+- Any vanilla file a mod fully overwrites must be listed in that mod's `framework/overrides.txt`.
+- Every `.txt` and `.yml` under `mod/` is UTF-8 **with BOM**.
+- Each mod keeps its own script prefix so two mods never collide in loc keys or global variables.
+'''
+
+
+# --------------------------------------------------------------------------- #
+# mod templates
 # --------------------------------------------------------------------------- #
 
 def metadata_json(a: Answers) -> str:
@@ -156,22 +313,21 @@ def metadata_json(a: Answers) -> str:
 
 
 def v3mod_toml(a: Answers) -> str:
-    return f'''# v3mod project config (read by the v3mod CLI)
+    return f'''# v3mod project config for one mod. Shared settings live in ../../{paths.WORKSPACE_NAME}.
 [mod]
 name = "{a.name}"
 id = "{a.mod_id}"
 prefix = "{a.prefix}"
 dir = "mod"            # mod root relative to this file (the folder that is linked into the game)
 
-[tools]
-# Path to the vic3-tiger executable. Leave empty to search PATH.
-tiger = ""
-# Path to the Victoria 3 install (folder containing game/ and binaries/). Leave empty to autodetect.
-game = ""
-
 [run]
-# Command-line flags added when v3mod launches the game.
+# Command-line flags added when v3mod launches the game for this mod.
 flags = ["-debug_mode"]
+
+# [tools]
+# Uncomment to override the workspace's tiger/game paths for this mod only.
+# tiger = ""
+# game = ""
 '''
 
 
@@ -201,18 +357,7 @@ scope_override = {
 '''
 
 
-def gitignore() -> str:
-    return '''# v3mod
-framework/baseline/*.log
-framework/run/
-*.log
-.DS_Store
-Thumbs.db
-__pycache__/
-'''
-
-
-def readme(a: Answers) -> str:
+def mod_readme(a: Answers) -> str:
     return f'''# {a.name}
 
 {a.description}
@@ -223,17 +368,19 @@ def readme(a: Answers) -> str:
 
 ## Layout
 
-- `mod/` — the mod itself (this folder is linked into `Documents/Paradox Interactive/Victoria 3/mod/`)
-- `framework/` — tooling state: Tiger baseline, error-log baselines, list of fully overridden vanilla files
+- `mod/` — the mod itself (linked into `Documents/Paradox Interactive/Victoria 3/mod/`)
+- `framework/` — tooling state: Tiger baseline, error-log baselines, list of fully overridden files
 
 ## Workflow
 
+Run these from this directory, or add `--mod {a.dir_name}` from the workspace root.
+
 ```
-v3mod link            # junction/symlink mod/ into the game's mod folder (done once)
+v3mod link            # symlink mod/ into the game's mod folder (done once)
 v3mod lint            # run vic3-tiger against mod/
-v3mod lint --ci       # JSON output, non-zero exit on new reports
-v3mod errors --tail 50   # show the end of the game's error.log
-v3mod errors --mine      # only lines that reference files in this mod
+v3mod lint --ci       # summary, non-zero exit on new reports
+v3mod test            # headless scripted tests
+v3mod-errors --mine   # error.log lines that reference this mod
 ```
 
 ## Conventions
@@ -307,13 +454,27 @@ def _write(path: Path, text: str, bom: bool = False) -> None:
     path.write_bytes(data)
 
 
-def _keep(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    (path / ".gitkeep").touch()
+def _write_new(path: Path, text: str) -> bool:
+    """Write only if absent — `v3mod new .` must not clobber an existing README or .gitignore."""
+    if path.exists():
+        return False
+    _write(path, text)
+    return True
 
 
-def create_project(a: Answers, parent: Path) -> Path:
-    root = parent / a.dir_name
+def create_workspace(root: Path, w: WorkspaceAnswers, defaults: dict) -> paths.Workspace:
+    root.mkdir(parents=True, exist_ok=True)
+    _write(root / paths.WORKSPACE_NAME, workspace_toml(w, defaults))
+    for path, text in ((root / "README.md", workspace_readme(w)),
+                       (root / ".gitignore", workspace_gitignore())):
+        if not _write_new(path, text):
+            print(f"  kept existing {path.name}")
+    (root / paths.DEFAULT_MODS_DIR).mkdir(exist_ok=True)
+    return paths.load_workspace(root / paths.WORKSPACE_NAME)
+
+
+def create_mod(a: Answers, ws: paths.Workspace) -> Path:
+    root = ws.mods_dir / a.dir_name
     if root.exists() and any(root.iterdir()):
         raise SystemExit(f"error: {root} already exists and is not empty")
     mod = root / "mod"
@@ -330,14 +491,16 @@ def create_project(a: Answers, parent: Path) -> Path:
     # No placeholder files inside mod/: the game and Tiger scan these folders.
 
     _write(root / paths.CONFIG_NAME, v3mod_toml(a))
-    _write(root / "README.md", readme(a))
-    _write(root / ".gitignore", gitignore())
+    _write(root / "README.md", mod_readme(a))
     _write(root / "framework/overrides.txt", overrides_txt())
-    _keep(root / "framework/baseline")
+    (root / "framework/baseline").mkdir(parents=True, exist_ok=True)
+    (root / "framework/baseline/.gitkeep").touch()
     return root
 
 
 def git_init(root: Path) -> bool:
+    if (root / ".git").exists():
+        return False
     if shutil.which("git") is None:
         print("  ! git not found on PATH; skipping git init")
         return False
@@ -347,7 +510,7 @@ def git_init(root: Path) -> bool:
     except subprocess.CalledProcessError as e:
         print(f"  ! git init failed: {e}")
         return False
-    commit = subprocess.run(["git", "commit", "-q", "-m", "Scaffold mod with v3mod"],
+    commit = subprocess.run(["git", "commit", "-q", "-m", "Scaffold workspace with v3mod"],
                             cwd=root, capture_output=True, text=True)
     if commit.returncode != 0:
         msg = (commit.stderr or commit.stdout).strip().splitlines()
@@ -359,33 +522,101 @@ def git_init(root: Path) -> bool:
     return True
 
 
+def _link(a: Answers, root: Path) -> None:
+    if not a.link:
+        return
+    try:
+        target = linking.link_mod(root / "mod", a.dir_name)
+        print(f"  linked     : {target}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  ! link failed: {e}\n    run `v3mod link --mod {a.dir_name}` later")
+
+
+def _report_mod(a: Answers, root: Path, ws: paths.Workspace) -> None:
+    rel = root.relative_to(ws.root)
+    print(f"\nCreated mod {a.name} in {root}")
+    print(f"  mod folder : {rel / 'mod'}")
+    print(f"  metadata   : {rel / 'mod/.metadata/metadata.json'}")
+    print(f"  tiger conf : {rel / 'mod/vic3-tiger.conf'}")
+    print(f"  smoke test : {rel / f'mod/tools/scripted_tests/{a.prefix}_smoke.txt'}")
+    _link(a, root)
+
+
 # --------------------------------------------------------------------------- #
-# entry point
+# entry points
 # --------------------------------------------------------------------------- #
 
 def cmd_new(args) -> int:
-    parent = Path(args.path).resolve() if args.path else Path.cwd()
-    answers = collect_answers(args)
-    root = create_project(answers, parent)
-    print(f"\nCreated {root}")
-    print(f"  mod folder : {root / 'mod'}")
-    print(f"  metadata   : mod/.metadata/metadata.json")
-    print(f"  tiger conf : mod/vic3-tiger.conf")
-    print(f"  smoke test : mod/tools/scripted_tests/{answers.prefix}_smoke.txt")
+    root = Path(args.path).resolve() if args.path else Path.cwd()
+    if (root / paths.WORKSPACE_NAME).exists():
+        raise SystemExit(
+            f"error: {root} is already a v3mod workspace. Use `v3mod add` to create another mod in it."
+        )
+    outer = paths.find_workspace(root.parent if not root.exists() else root)
+    if outer is not None:
+        raise SystemExit(
+            f"error: {root} is inside the workspace at {outer.root}; workspaces don't nest. "
+            f"Run `v3mod add` there instead."
+        )
+    if (root / paths.CONFIG_NAME).exists():
+        raise SystemExit(f"error: {root} holds a single-mod {paths.CONFIG_NAME}; move it under mods/ first")
 
-    if answers.git_init:
-        if git_init(root):
-            print("  git        : initialised with first commit")
+    wa = collect_workspace_answers(args, root)
+    inherited = {"author": wa.author, "id_prefix": wa.id_prefix, "game_version": wa.game_version}
 
-    if answers.link:
-        try:
-            target = linking.link_mod(root / "mod", answers.dir_name)
-            print(f"  linked     : {target}")
-        except Exception as e:  # noqa: BLE001
-            print(f"  ! link failed: {e}\n    run `v3mod link` later (may need admin/dev-mode on Windows)")
+    # The first mod's answers become the workspace defaults, so `v3mod add` repeats them.
+    answers = None if args.empty else collect_mod_answers(args, inherited, siblings=[])
+    if answers is not None:
+        inherited.update(multiplayer=answers.multiplayer, cmf=answers.depend_cmf, link=answers.link)
+
+    ws = create_workspace(root, wa, inherited)
+    print(f"\nCreated workspace {root}")
+    print(f"  config     : {paths.WORKSPACE_NAME}")
+    print(f"  mods dir   : {paths.DEFAULT_MODS_DIR}/")
+
+    if answers is not None:
+        _report_mod(answers, create_mod(answers, ws), ws)
+
+    if wa.git_init and git_init(root):
+        print("  git        : initialised with first commit")
 
     print("\nNext steps:")
-    print("  cd", root.name)
-    print("  v3mod lint        # needs vic3-tiger on PATH: https://github.com/amtep/tiger/releases")
-    print("  Add the mod in the Paradox launcher playset (it appears under local mods).")
+    print(f"  cd {root}")
+    if answers is None:
+        print("  v3mod add         # scaffold the first mod")
+    else:
+        print(f"  cd {paths.DEFAULT_MODS_DIR}/{answers.dir_name}")
+        print("  v3mod lint        # needs vic3-tiger on PATH: https://github.com/amtep/tiger/releases")
+        print("  v3mod add         # later: another mod, inheriting this workspace's defaults")
+    return 0
+
+
+def cmd_add(args) -> int:
+    start = Path(args.workspace).resolve() if args.workspace else None
+    ws = paths.require_workspace(start)
+    if getattr(args, "mod_name", None):
+        args.name = args.mod_name
+    siblings = ws.mods()
+    answers = collect_mod_answers(args, ws.defaults, siblings)
+    root = create_mod(answers, ws)
+    _report_mod(answers, root, ws)
+    print("\nNext steps:")
+    print(f"  cd {root}")
+    print("  v3mod lint")
+    return 0
+
+
+def cmd_mods(args) -> int:
+    ws = paths.require_workspace()
+    mods = ws.mods()
+    print(f"workspace {ws.name} at {ws.root}")
+    if not mods:
+        print(f"  (no mods yet — run `v3mod add`; expected under {ws.mods_dir})")
+        return 0
+    mods_root = paths.mods_dir()
+    width = max(len(m.root.name) for m in mods)
+    for m in mods:
+        link = mods_root / m.root.name
+        state = "linked" if link.is_symlink() or link.exists() else "not linked"
+        print(f"  {m.root.name:<{width}}  {m.label}  [{m.mod_id or 'no id'}]  {state}")
     return 0

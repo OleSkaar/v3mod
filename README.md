@@ -15,15 +15,30 @@ optional; core has no knowledge of them and works fully without any of them inst
 
 ## Quick start
 
+Mods live together in one **workspace** — a monorepo with shared defaults, created once:
+
 ```bash
 pipx install --editable ~/Tools/v3mod/core
 v3mod doctor                      # checks git, steam, tiger, game install, Steam Linux Runtime
-mkdir -p ~/Mods/V3 && v3mod new ~/Mods/V3
-cd ~/Mods/V3/<name>
+v3mod new ~/Mods/V3               # workspace + its first mod (one git repo)
+cd ~/Mods/V3
+v3mod add "National Strategies"   # every later mod: no setup questions worth answering twice
+v3mod mods                        # what's here, and what's linked into the game
+cd mods/pet_peeves
 v3mod lint                        # Tiger
 v3mod launch                      # straight into the game, no launcher, no shader step
 v3mod test                        # headless scripted-test run
 ```
+
+```
+~/Mods/V3/                        the workspace, one git repository
+  v3mod-workspace.toml            shared defaults (author, id prefix, game version) and tool paths
+  mods/pet_peeves/                one mod: v3mod.toml, mod/, framework/
+  mods/national_strategies/
+```
+
+Every mod command acts on the mod you're standing in; from the workspace root, name it with
+`--mod <dir>` (or `--all`, where it makes sense).
 
 Each piece has its own README with the details.
 

@@ -49,7 +49,20 @@ def _severity(report: dict) -> str:
 
 
 def cmd_lint(args) -> int:
-    proj = paths.require_project()
+    if getattr(args, "all", False):
+        mods = paths.require_workspace().mods()
+        if not mods:
+            raise SystemExit("error: the workspace has no mods yet; run `v3mod add`")
+        worst = 0
+        for proj in mods:
+            print(f"\n=== {proj.root.name} ===")
+            rc = _lint_one(proj, args)
+            worst = rc or worst
+        return worst
+    return _lint_one(paths.require_project(args), args)
+
+
+def _lint_one(proj: paths.Project, args) -> int:
     want_json = bool(args.ci or args.baseline or args.json)
     cmd = _tiger_cmd(proj, args, json_out=want_json)
 

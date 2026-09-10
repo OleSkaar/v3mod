@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "v3mod"
-version = "0.8.1"
-description = "Victoria 3 mod CLI: scaffold, lint (via Tiger), link, launch, headless scripted tests."
+version = "0.9.0"
+description = "Victoria 3 mod CLI: a workspace of mods — scaffold, lint (via Tiger), link, launch, headless scripted tests."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

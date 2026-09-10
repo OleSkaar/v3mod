@@ -22,6 +22,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tail", type=int, metavar="N")
     p.add_argument("--grep", metavar="REGEX")
     p.add_argument("--mine", action="store_true", help="only lines referencing this mod's files")
+    p.add_argument("-m", "--mod", metavar="NAME",
+                   help="which mod in the workspace --mine/--baseline/--diff apply to "
+                        "(default: the mod containing the working directory, or the only mod)")
     p.add_argument("--baseline", metavar="NAME", help="save normalised lines as a baseline")
     p.add_argument("--diff", metavar="NAME", help="show lines not in baseline NAME")
     return p

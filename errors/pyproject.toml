@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "error.log filtering and vanilla-baseline diffing for Victoria 3 mods (v3mod add-on)."
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = ["v3mod>=0.8"]
+dependencies = ["v3mod>=0.9"]
 
 [project.scripts]
 v3mod-errors = "v3mod_errors.cli:main"
