@@ -39,13 +39,14 @@ cp /tmp/vic3-tiger-linux-v1.19.0/vic3-tiger ~/.local/bin/ && chmod +x ~/.local/b
 | `v3mod add [NAME]` | Scaffold another mod in the workspace, inheriting its `[defaults]`. Refuses a directory name, mod id or script prefix already used by a sibling. |
 | `v3mod mods` | Every mod in the workspace, its id, and whether it is linked into the game. |
 | `v3mod lint [--ci] [--baseline]` | Tiger. `--ci` gives a severity summary and exits 1 at/above `--fail-on` (default `warning`). `--baseline` snapshots today's reports so later runs show only new ones. |
-| `v3mod test` | Headless scripted tests: `-nographics -handsoff -scripted_tests`, hides vanilla's own tests for the run, polls `tests.txt`, stops the process group, copies results and `TEST_FAIL_*.v3` saves to `framework/test-output/<timestamp>/`, prints a table, exits 1 on failure. |
+| `v3mod test` | Headless scripted tests: `-nographics -handsoff -scripted_tests`, hides vanilla's own tests for the run, polls `tests.txt`, stops the process group, copies results and `TEST_FAIL_*.v3` saves to `framework/test-output/<timestamp>/`, prints a table, exits 1 on failure. `--seeds 13-16` runs one game per seed in sequence into `<out>/seed-N/` (under `kde-inhibit`/`systemd-inhibit` when available); `--load a,b` writes `content_load.json` for the run and restores it; `--only`/`--skip` pick suite files; `--tail REGEX` keeps matching `debug.log` lines live in `watch.log` (the engine truncates that file mid-run); `--retries N` relaunches after a startup crash; a timed-out run still records the markers whose `TEST_FAIL_*` saves exist (`failed.txt`). |
+| `v3mod report [DIR...]` | Marker × run table with pass rates over test-output folders (a run's `tests.txt`, or `failed.txt`/saves when it was cut off). |
 | `v3mod launch` | Runs the binary directly inside the Steam Linux Runtime with `SteamAppId` set: no Paradox launcher, no Steam shader pre-processing. `--steam` for the old path. |
 | `v3mod flags` | Probes the binary for known engine flags (`-nographics`, `-handsoff`, `-continuelastsave`, …). |
 | `v3mod link` / `unlink` | Symlink `mod/` into the game's mod folder. **This is the dev loop** — the engine watches the linked folder, so edits are live with no build step. |
 | `v3mod build` | Clean copy of a mod for publishing: no scripted tests, no tiger config, no editor droppings. `--set-version` stamps the built `metadata.json` without touching the source, `--zip` writes `<dir>-<version>.zip`. Output lands in `framework/build/`. |
 | `v3mod check-overrides` | Fails if a mod file shadows a vanilla file and isn't declared in `framework/overrides.txt`. |
-| `v3mod playset show` / `enable` | Inspect/edit the launcher's `dlc_load.json`. |
+| `v3mod playset show` / `set MOD,MOD` | Show or write `<user data>/content_load.json`, the file the game reads at startup to know which mods to load (the 1.14 launcher writes it; a direct launch never consults the launcher's playset). `enable` still edits the legacy `dlc_load.json`. |
 | `v3mod paths` / `doctor` | Resolved directories; toolchain health. |
 | `v3mod sync` | Planned: patch-upgrade helper. |
 

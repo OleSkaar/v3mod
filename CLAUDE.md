@@ -16,13 +16,14 @@ code and the READMEs win.
 
 ## Layout
 
-Four independent pieces; only `core` is required, and core knows nothing about the other three.
+Five independent pieces; only `core` is required, and core knows nothing about the other four.
 
 | Path | Package / install | Role |
 |---|---|---|
-| `core/` | `v3mod` (`pipx install --editable ./core`) | The CLI: `new`, `add`, `mods`, `lint`, `test`, `launch`, `link`, `build`, `playset`, `paths`, `doctor`. |
+| `core/` | `v3mod` (`pipx install --editable ./core`) | The CLI: `new`, `add`, `mods`, `lint`, `test`, `report`, `launch`, `link`, `build`, `playset`, `paths`, `doctor`. |
 | `errors/` | `v3mod-errors` | Optional: filter `error.log` to this mod, diff a vanilla baseline, read `database_conflicts.log`. |
 | `settings/` | `v3mod-settings` | Optional: named `pdx_settings.json` profiles. Only for manual sessions — `v3mod test` is headless. |
+| `saves/` | `v3mod-saves` | Optional: `v3mod-save`, queries plaintext saves through jomini (node). No Python dependencies; the node package is installed into `~/.cache/v3mod` on first use, never into the repo. |
 | `skill/v3mod-modding/` | copied to `~/.claude/skills/` | Agent Skill teaching the workflow; calls the CLI. |
 
 Each piece has its own README with the details; the root `README.md` is the overview.
@@ -57,7 +58,7 @@ Each piece has its own README with the details; the root `README.md` is the over
 ## Checks
 
 ```bash
-python3 -m compileall -q core errors settings   # nothing else is wired up yet
+python3 -m compileall -q core errors settings saves   # nothing else is wired up yet
 ```
 
 There is no test suite in this repo yet.

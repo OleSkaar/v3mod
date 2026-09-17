@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "v3mod-saves"
+version = "0.1.0"
+description = "Read plaintext Victoria 3 saves through jomini: plays, interests, states, pacts, AI strategies, techs, movements (v3mod add-on)."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+v3mod-save = "v3mod_saves.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["v3mod_saves*"]
+
+[tool.setuptools.package-data]
+v3mod_saves = ["js/*.mjs", "js/package.json"]

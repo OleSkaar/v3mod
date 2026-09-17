@@ -12,7 +12,7 @@ import os
 import sys
 
 from . import __version__
-from . import build, checks, launch, linking, lint, scaffold, testing
+from . import build, checks, launch, linking, lint, report, scaffold, testing
 
 
 def _not_implemented(name: str, doc_section: str):
@@ -157,10 +157,12 @@ def build_parser() -> argparse.ArgumentParser:
     _mod_selector(la)
     la.set_defaults(func=launch.cmd_launch)
 
-    ps = sub.add_parser("playset", help="inspect/edit the launcher's dlc_load.json (Linux)")
+    ps = sub.add_parser("playset", help="show or set which mods the game loads (content_load.json)")
     pssub = ps.add_subparsers(dest="playset_command", required=True)
-    pssub.add_parser("show", help="print dlc_load.json")
-    pe = pssub.add_parser("enable", help="append an entry to enabled_mods")
+    pssub.add_parser("show", help="print content_load.json (what the game reads) and dlc_load.json")
+    pset = pssub.add_parser("set", help="write content_load.json enabling exactly these workspace mods")
+    pset.add_argument("mods", metavar="MOD[,MOD]", help="workspace mod directory names, comma-separated")
+    pe = pssub.add_parser("enable", help="legacy: append an entry to dlc_load.json's enabled_mods")
     pe.add_argument("--entry", required=True, help='exact string to add, e.g. "mod/grand_canals"')
     ps.set_defaults(func=launch.cmd_playset)
 
@@ -173,6 +175,25 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--no-save-after-failed-test", action="store_true", help="skip the TEST_FAIL_* save on failure")
     t.add_argument("--continue-last-save", action="store_true", help="add -continuelastsave")
     t.add_argument("--seed", type=int, help="add -random_seed=N")
+    t.add_argument("--seeds", metavar="LIST", help="run once per seed, in sequence: '13,14' or '13-16'; "
+                   "results under <out>/seed-N/")
+    t.add_argument("--load", metavar="MOD[,MOD]",
+                   help="workspace mods the game loads for the run (content_load.json is written and "
+                        "restored afterwards); the selected mod is always included")
+    t.add_argument("--only", metavar="SUITE[,SUITE]", help="run only these scripted-test files (stems)")
+    t.add_argument("--skip", metavar="SUITE[,SUITE]", help="hide these scripted-test files for the run")
+    t.add_argument("--tail", metavar="REGEX",
+                   help="keep debug.log lines matching REGEX live in <out>/watch.log (the engine "
+                        "truncates debug.log in place mid-run)")
+    t.add_argument("--debug-log", action="store_true", help="copy the whole debug.log into the output dir")
+    t.add_argument("--out", metavar="DIR", help="output directory (default framework/test-output/<timestamp>)")
+    t.add_argument("--retries", type=int, default=0, help="relaunch when the game dies at startup (default 0)")
+    t.add_argument("--pause", type=int, default=30, help="seconds between seeds (default 30)")
+    t.add_argument("--keep-fail-saves", action="store_true",
+                   help="do not delete stale TEST_FAIL_* saves before the run (the engine will not "
+                        "overwrite a same-named save)")
+    t.add_argument("--no-copy-saves", action="store_true", help="do not copy new TEST_FAIL_* saves to the output dir")
+    t.add_argument("--no-inhibit", action="store_true", help="do not wrap a multi-seed batch in kde-/systemd-inhibit")
     t.add_argument("--runtime", choices=["auto", "sniper", "soldier", "none"], default="auto")
     t.add_argument("--flag", action="append", metavar="FLAG", help="extra launch flag (repeatable)")
     t.add_argument("--poll", type=int, default=15, help="seconds between checks of tests.txt (default 15)")
@@ -184,6 +205,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     fl = sub.add_parser("flags", help="probe the game binary for known engine launch flags")
     fl.set_defaults(func=testing.cmd_flags)
+
+    r = sub.add_parser("report", help="pass-rate table across scripted-test runs")
+    r.add_argument("dirs", nargs="*", metavar="DIR",
+                   help="run directories, or folders of runs (default: this mod's framework/test-output)")
+    _mod_selector(r)
+    r.set_defaults(func=report.cmd_report)
 
     # planned ---------------------------------------------------------------
     sub.add_parser("sync", help="[planned] patch-upgrade helper") \
