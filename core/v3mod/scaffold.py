@@ -7,7 +7,7 @@ Layout produced:
       README.md  .gitignore    one git repository for every mod
       mods/<dir>/v3mod.toml    one mod
       mods/<dir>/mod/          the part the game sees (symlinked into the mod folder)
-      mods/<dir>/framework/    tooling state: baselines, declared overrides, test output
+      mods/<dir>/framework/    tooling state: Tiger baseline, declared overrides, test output
 """
 
 from __future__ import annotations
@@ -237,7 +237,6 @@ user_dir = ""
 
 def workspace_gitignore() -> str:
     return '''# v3mod
-mods/*/framework/baseline/*.log
 mods/*/framework/run/
 mods/*/framework/test-output/
 mods/*/framework/build/
@@ -260,7 +259,7 @@ Victoria 3 mods by {w.author}, in one repository managed by the
 v3mod-workspace.toml   shared defaults (author, id prefix, game version) and tool paths
 mods/<dir>/            one mod
 mods/<dir>/mod/        the part the game sees — symlinked into the game's mod folder
-mods/<dir>/framework/  tooling state: Tiger baseline, error-log baselines, declared overrides
+mods/<dir>/framework/  tooling state: Tiger baseline, declared overrides
 ```
 
 ## Working here
@@ -381,7 +380,7 @@ def mod_readme(a: Answers) -> str:
 ## Layout
 
 - `mod/` — the mod itself (linked into the game's mod folder; `v3mod paths` shows where that is)
-- `framework/` — tooling state: Tiger baseline, error-log baselines, list of fully overridden files
+- `framework/` — tooling state: Tiger baseline, list of fully overridden files
 
 ## Workflow
 
@@ -505,8 +504,6 @@ def create_mod(a: Answers, ws: paths.Workspace) -> Path:
     _write(root / paths.CONFIG_NAME, v3mod_toml(a))
     _write(root / "README.md", mod_readme(a))
     _write(root / "framework/overrides.txt", overrides_txt())
-    (root / "framework/baseline").mkdir(parents=True, exist_ok=True)
-    (root / "framework/baseline/.gitkeep").touch()
     return root
 
 
