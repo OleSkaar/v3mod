@@ -464,11 +464,13 @@ class Project:
     tiger: str | None = None
     game: str | None = None
     workspace: Workspace | None = None
+    baseline_dir: Path = field(init=False)  # v3mod-errors' error-log baselines; created on demand
     tiger_baseline: Path = field(init=False)
     overrides_file: Path = field(init=False)
 
     def __post_init__(self) -> None:
         fw = self.root / "framework"
+        self.baseline_dir = fw / "baseline"
         self.tiger_baseline = fw / "tiger-baseline.json"
         self.overrides_file = fw / "overrides.txt"
 
