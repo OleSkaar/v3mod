@@ -13,6 +13,42 @@ small and nothing you don't use is in the way.
 **Only `core` is required.** `errors`, `settings` and the skill are each independent and each
 optional; core has no knowledge of them and works fully without any of them installed.
 
+## Building and installing
+
+Prerequisites: git, Python 3.11+ and [pipx](https://pipx.pypa.io/). There are no third-party
+Python dependencies — `core` is standard library only, and the add-ons depend only on `v3mod`.
+
+```bash
+git clone https://github.com/OleSkaar/v3mod.git
+cd v3mod
+pipx install --editable ./core               # required
+pipx install --editable ./errors             # optional
+pipx install --editable ./settings           # optional
+pipx ensurepath                              # once, if ~/.local/bin is not on PATH yet
+cp -r skill/v3mod-modding ~/.claude/skills/  # optional: the Claude Code skill
+```
+
+`--editable` points the installed commands at this working tree, so a `git pull` or a local edit
+takes effect without reinstalling. On Bazzite / Fedora Atomic, get pipx from Homebrew
+(`brew install pipx`) — system `pip` is blocked by PEP 668. A plain venv works too; see
+[`core/README.md`](core/README.md), which also covers putting `vic3-tiger` on `PATH` for
+`v3mod lint`.
+
+To build distributable packages instead of installing editable:
+
+```bash
+pipx run build ./core                        # -> core/dist/v3mod-<version>.whl and .tar.gz
+pipx run build ./errors
+pipx run build ./settings
+```
+
+Checks, before committing:
+
+```bash
+python3 -m compileall -q core errors settings   # the only automated check so far; no test suite yet
+v3mod doctor                                    # git, steam, tiger, game install, Steam Linux Runtime
+```
+
 ## Quick start
 
 Mods live together in one **workspace** — a monorepo with shared defaults, created once:
