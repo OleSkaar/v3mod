@@ -8,6 +8,7 @@ small and nothing you don't use is in the way.
 | **`core/`** | `pipx install --editable ./core` | The CLI: scaffold, lint via Tiger, link, launch, headless scripted tests, playset, doctor. |
 | **`errors/`** | `pipx install --editable ./errors` | `v3mod-errors`: filter `error.log` to your mod, diff against a vanilla baseline, read `database_conflicts.log`. **Optional.** |
 | **`settings/`** | `pipx install --editable ./settings` | `v3mod-settings`: named `pdx_settings.json` profiles (potato vs play). **Optional** — headless test runs render nothing, so this is only for manual sessions. |
+| **`saves/`** | `pipx install --editable ./saves` | `v3mod-save`: query a plaintext save (`TEST_FAIL_*.v3`) through the jomini parser — plays, interest involvement, state owners, pacts, AI strategies, techs, movements, civil wars, global variables, raw paths. Needs `node`/`npm`; installs jomini into `~/.cache/v3mod` on first use. **Optional.** |
 | **`skill/`** | `cp -r skill/v3mod-modding ~/.claude/skills/` | Agent Skill teaching Claude the workflow; calls the CLI. |
 
 **Only `core` is required.** `errors`, `settings` and the skill are each independent and each
@@ -24,6 +25,7 @@ cd v3mod
 pipx install --editable ./core               # required
 pipx install --editable ./errors             # optional
 pipx install --editable ./settings           # optional
+pipx install --editable ./saves              # optional (needs node + npm)
 pipx ensurepath                              # once, if ~/.local/bin is not on PATH yet
 cp -r skill/v3mod-modding ~/.claude/skills/  # optional: the Claude Code skill
 ```

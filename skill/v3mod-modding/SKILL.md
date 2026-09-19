@@ -87,10 +87,15 @@ v3mod lint --ci              Tiger; exit 1 on new warning+ (baseline-suppressed)
 v3mod lint --ci --all        the same for every mod in the workspace
 v3mod check-overrides        fails on undeclared full-file overrides of vanilla
 v3mod test                   headless scripted-test run, prints OK/FAIL table
+v3mod test --seeds 13-16     one run per seed in sequence (--load, --only/--skip, --tail, --out)
+v3mod report DIR...          marker x run pass-rate table over test-output folders
+v3mod playset set MOD,MOD    which workspace mods the game loads (content_load.json)
 v3mod launch                 straight into the game, debug mode, no launcher
 v3mod build                  clean copy for publishing (release only, not the dev loop)
 v3mod-errors --mine          error.log lines referencing this mod   (optional add-on)
 v3mod-errors --conflicts     which file won each override            (optional add-on)
+v3mod-save SAVE plays        query a plaintext save: plays, involvement, states, pacts,
+                             strategies, techs, movements, civil-wars, globals, get (optional add-on)
 ```
 
 Every command above acts on the mod containing the working directory. From the workspace root, add

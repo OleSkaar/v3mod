@@ -1,0 +1,10 @@
+{
+  "name": "v3mod-pdxq",
+  "private": true,
+  "version": "1.0.0",
+  "description": "jomini-based path query over a plaintext Paradox save (used by v3mod-save)",
+  "type": "module",
+  "dependencies": {
+    "jomini": "^0.10.0"
+  }
+}

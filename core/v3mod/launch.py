@@ -10,8 +10,11 @@ launch:
   v3mod launch --wait               block until the process exits, then report where test results land
 
 playset:
-  v3mod playset show                print <user data>/dlc_load.json if present
-  v3mod playset enable --entry S    append S to enabled_mods (backs the file up first)
+  v3mod playset show                print <user data>/content_load.json (what the game reads at
+                                    startup since the 1.14 launcher) and dlc_load.json if present
+  v3mod playset set MOD[,MOD]       write content_load.json enabling exactly these workspace mods
+                                    (their links in the game's mod folder; backs the file up first)
+  v3mod playset enable --entry S    legacy: append S to dlc_load.json's enabled_mods
 """
 
 from __future__ import annotations
@@ -205,16 +208,98 @@ def _dlc_load_path() -> Path:
     return paths.user_data_dir() / "dlc_load.json"
 
 
+CONTENT_LOAD = "content_load.json"
+CONTENT_LOAD_BACKUP = "content_load.json.v3mod-backup"
+
+
+def _mod_link_name(proj: paths.Project) -> str:
+    """The name of this mod's link in the game's mod folder (v3mod link's default is the dir name)."""
+    mods = paths.mods_dir()
+    if mods.is_dir():
+        for entry in mods.iterdir():
+            try:
+                if entry.is_symlink() and entry.resolve() == proj.mod_dir.resolve():
+                    return entry.name
+            except OSError:
+                continue
+    return proj.root.name
+
+
+def _mod_path_for_game(user_dir: Path, link_name: str) -> str:
+    """The `path` the game expects in content_load.json for a mod in <user data>/mod/.
+
+    A Windows build under Proton sees its user dir as C:/users/steamuser/... (backslashes); the
+    native build takes the Linux path."""
+    p = user_dir / "mod" / link_name
+    parts = p.parts
+    if "drive_c" in parts:
+        i = parts.index("drive_c")
+        return "C:\\" + "\\".join(parts[i + 1:])
+    return str(p)
+
+
+def content_load_entries(user_dir: Path, mods: list[paths.Project]) -> list[dict]:
+    return [{"path": _mod_path_for_game(user_dir, _mod_link_name(m))} for m in mods]
+
+
+def set_content_load(user_dir: Path, mods: list[paths.Project]) -> Path | None:
+    """Write content_load.json enabling exactly `mods`; returns the backup path (None if there was
+    no file to back up). DLC and UGC settings from the existing file are kept."""
+    path = user_dir / CONTENT_LOAD
+    data: dict = {"enabledMods": [], "disabledDLC": [], "enabledUGC": []}
+    backup = None
+    if path.exists():
+        try:
+            data.update(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            pass
+        backup = user_dir / CONTENT_LOAD_BACKUP
+        shutil.copy(path, backup)
+    data["enabledMods"] = content_load_entries(user_dir, mods)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return backup
+
+
+def restore_content_load(user_dir: Path, backup: Path | None) -> None:
+    if backup is not None and backup.exists():
+        backup.replace(user_dir / CONTENT_LOAD)
+
+
 def cmd_playset(args) -> int:
-    path = _dlc_load_path()
+    user_dir = paths.user_data_dir()
     if args.playset_command == "show":
-        if not path.exists():
-            print(f"{path} not found. Open the launcher once and create a playset; "
-                  "then re-run to see what it writes.")
+        shown = 0
+        for p in (user_dir / CONTENT_LOAD, _dlc_load_path()):
+            if p.exists():
+                print(p)
+                try:
+                    print(json.dumps(json.loads(p.read_text(encoding="utf-8")), indent=2))
+                except ValueError:
+                    print(p.read_text(encoding="utf-8"))
+                shown += 1
+        if not shown:
+            print(f"neither {CONTENT_LOAD} nor dlc_load.json found in {user_dir}. Open the launcher "
+                  "once and create a playset; then re-run to see what it writes.")
             return 1
-        print(path)
-        print(path.read_text(encoding="utf-8"))
         return 0
+
+    if args.playset_command == "set":
+        ws = paths.require_workspace()
+        mods: list[paths.Project] = []
+        for name in [n.strip() for n in args.mods.split(",") if n.strip()]:
+            m = ws.mod(name)
+            if m is None:
+                raise SystemExit(f"error: no mod '{name}' in the workspace ({', '.join(d.name for d in ws.mod_dirs())})")
+            mods.append(m)
+        missing = [m for m in mods if not (paths.mods_dir() / _mod_link_name(m)).exists()]
+        for m in missing:
+            print(f"warning: {m.root.name} is not linked into {paths.mods_dir()} (v3mod link -m {m.root.name})")
+        backup = set_content_load(user_dir, mods)
+        print(f"{user_dir / CONTENT_LOAD}: enabled {', '.join(m.root.name for m in mods)}"
+              + (f" (backup: {backup.name})" if backup else ""))
+        return 0
+
+    path = _dlc_load_path()
 
     # enable
     if not path.exists():
